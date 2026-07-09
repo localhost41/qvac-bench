@@ -1,0 +1,43 @@
+
+### 2.4 Failure Diagnosis & Triage
+
+When a run fails (non‑zero exit code), examine the line written to stderr.
+The tool outputs a sanitised error message that avoids leaking credentials.
+The following list covers common failure patterns, their likely causes, and
+suggested investigative steps.
+
+- **`QVAC endpoint returned a non‑2xx response at …`**  
+  The QVAC server replied with an HTTP status that is not in the 2xx range.  
+  *Likely causes:* incorrect API key, invalid model name, rate‑limiting, or
+  the server is temporarily misconfigured.  
+  *Action:* Confirm the key (via environment variable or `--api‑key`), verify
+  the model is available for your account, and check the API documentation
+  for any recent changes.
+
+- **`QVAC endpoint returned a malformed stream at …`**  
+  The server sent a stream response whose content could not be parsed as
+  valid JSON Server‑Sent Events (SSE) data.  
+  *Likely causes:* the endpoint does not support streaming, a proxy is
+  munging the response, or a network corruption occurred.  
+  *Action:* Try a different model or retry the request after a short delay.
+  If you suspect a proxy issue, investigate the proxy configuration or
+  temporarily bypass it.
+
+- **`Query timed out`** (or any message containing “timeout”)  
+  The configured timeout elapsed before the first token arrived.  
+  *Action:* Increase `--timeout <milliseconds>` or try a lighter prompt.
+  Verify that the endpoint is reachable via `curl` or a browser and check
+  the current network latency.
+
+- **Generic network errors** (e.g., `fetch failed`, `ECONNREFUSED`)  
+  The CLI cannot reach the provided URL.  
+  *Action:* Check the URL for typos, proxy settings, and DNS resolution.
+  Make sure the machine can access the endpoint on the required port
+  (commonly 443). Consider trying the same request with `curl` to isolate
+  the problem.
+
+When triaging, it is often helpful to re‑run with `--output json` to
+obtain a machine‑readable error record on stderr.  This record can be
+logged for later analysis.  Ensure that the error output does not contain
+raw credentials; the tool redacts common secret‑bearing headers by
+default.

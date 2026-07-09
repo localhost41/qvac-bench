@@ -32,8 +32,8 @@ run on any developer machine or CI agent – no QVAC access is needed.
 
 | Environment                     | Steps                                                                 | Expected Outcome                    | Pass? | Date       | Notes |
 | ------------------------------- | --------------------------------------------------------------------- | ----------------------------------- | :---: | ---------- | ----- |
-| macOS 14 (Apple Silicon) – local | `pnpm install && pnpm test && pnpm build`                             | All tests green; build succeeds     |  ☐   |            | Run on a clean checkout. |
-| Linux (fresh install)           | `pnpm install && pnpm test && pnpm build`                             | All tests green; build succeeds     |  ☐   |            | Node.js 20 LTS from a clean image. |
+| macOS 14 (Apple Silicon) – local | `pnpm install && pnpm test && pnpm build`                             | All tests green; build succeeds     |  ☐   |            | Run on a clean checkout. **[UNRESOLVED]** |
+| Linux (fresh install)           | `pnpm install && pnpm test && pnpm build`                             | All tests green; build succeeds     |  ☐   |            | Node.js 20 LTS from a clean image. **[UNRESOLVED]** |
 
 ### 1.3 Additional Mock Checks
 
@@ -67,8 +67,8 @@ pipeline that does not have access to the real endpoint.
 
 | Environment                     | QVAC URL               | Model          | Command (example)                                                                                                                                                    | Expected Output                                                                          | Pass? | Date       | Notes |
 | ------------------------------- | ----------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | :---: | ---------- | ----- |
-| macOS 14 (Apple Silicon) – local | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Time‑to‑first‑token and total‑time stats printed; exit code 0.                           |  ☐   |            | Run after a clean build. |
-| Linux (fresh install)           | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Same as above; no errors.                                                                 |  ☐   |            | Node.js 20 LTS from a clean image. |
+| macOS 14 (Apple Silicon) – local | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Time‑to‑first‑token and total‑time stats printed; exit code 0.                           |  ☐   |            | Run after a clean build. **[UNRESOLVED]** |
+| Linux (fresh install)           | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Same as above; no errors.                                                                 |  ☐   |            | Node.js 20 LTS from a clean image. **[UNRESOLVED]** |
 
 ### 2.3 Steps for Each Row
 
