@@ -12,6 +12,23 @@ all automated tests use in‑memory mock servers.
 > QVAC deployment. Every item that still needs verification is marked as
 > **[UNRESOLVED]**.
 
+## Release Readiness Status
+
+Current package version: `0.1.0-alpha.0`
+
+As of 2026-07-09:
+
+- Automated mock validation: covered by `pnpm verify:package` and CI on Node.js
+  22, 24, and 26. Record the exact CI run before release.
+- Packed package installability: covered by `pnpm verify:package`, which packs
+  the tarball, installs it into a temporary consumer project, imports the public
+  API, runs the installed CLI help command, and checks shipped docs.
+- Real-QVAC validation: **[UNRESOLVED]**. No passing live-QVAC run is claimed by
+  this repository until the matrix in [Real QVAC Validation](#2-real-qvac-validation)
+  includes dated pass entries with endpoint, model, command, and notes.
+- Public benchmark claims: **blocked** until real-QVAC validation is completed
+  and a benchmark report is filled from `docs/reports/template.md`.
+
 ---
 
 ## 1. Mock CI Validation
@@ -32,8 +49,9 @@ run on any developer machine or CI agent – no QVAC access is needed.
 
 | Environment                     | Steps                                                                 | Expected Outcome                    | Pass? | Date       | Notes |
 | ------------------------------- | --------------------------------------------------------------------- | ----------------------------------- | :---: | ---------- | ----- |
-| macOS 14 (Apple Silicon) – local | `pnpm install && pnpm test && pnpm build`                             | All tests green; build succeeds     |  ☐   |            | Run on a clean checkout. **[UNRESOLVED]** |
-| Linux (fresh install)           | `pnpm install && pnpm test && pnpm build`                             | All tests green; build succeeds     |  ☐   |            | Node.js 20 LTS from a clean image. **[UNRESOLVED]** |
+| macOS 14 (Apple Silicon) – local | `pnpm install && pnpm verify:package`                                 | All checks green; tarball installs  |  ☐   |            | Run on a clean checkout. **[UNRESOLVED]** |
+| Linux (fresh install)           | `pnpm install && pnpm verify:package`                                 | All checks green; tarball installs  |  ☐   |            | Node.js 22, 24, or 26 from a clean image. **[UNRESOLVED]** |
+| GitHub Actions Linux            | CI workflow matrix                                                    | Node.js 22, 24, and 26 all pass     |  ☐   |            | Link the workflow run before release. **[UNRESOLVED]** |
 
 ### 1.3 Additional Mock Checks
 
@@ -68,7 +86,7 @@ pipeline that does not have access to the real endpoint.
 | Environment                     | QVAC URL               | Model          | Command (example)                                                                                                                                                    | Expected Output                                                                          | Pass? | Date       | Notes |
 | ------------------------------- | ----------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | :---: | ---------- | ----- |
 | macOS 14 (Apple Silicon) – local | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Time‑to‑first‑token and total‑time stats printed; exit code 0.                           |  ☐   |            | Run after a clean build. **[UNRESOLVED]** |
-| Linux (fresh install)           | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Same as above; no errors.                                                                 |  ☐   |            | Node.js 20 LTS from a clean image. **[UNRESOLVED]** |
+| Linux (fresh install)           | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Same as above; no errors.                                                                 |  ☐   |            | Node.js 22, 24, or 26 from a clean image. **[UNRESOLVED]** |
 
 ### 2.3 Steps for Each Row
 
