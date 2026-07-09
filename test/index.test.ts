@@ -211,4 +211,137 @@ describe("qvac-bench", () => {
     expect(result.stderr).toContain("Is it running?");
     expect(result.stderr).toContain("ECONNREFUSED");
   });
+
+  // ------------------------------------------------------------
+  // Schema / golden output tests for Issue #17
+  // ------------------------------------------------------------
+
+  it("validates JSON output keys and data types", async () => {
+    const result = await runCli(["--output", "json"], {}, benchmarkDependenciesForOutput("Hello"));
+    expect(result.exitCode).toBe(0);
+
+    const parsed = JSON.parse(result.stdout);
+
+    // required fields
+    expect(parsed).toHaveProperty("timeToFirstTokenMs");
+    expect(typeof parsed.timeToFirstTokenMs).toBe("number");
+    expect(parsed).toHaveProperty("totalTimeMs");
+    expect(typeof parsed.totalTimeMs).toBe("number");
+    expect(parsed).toHaveProperty("output");
+    expect(typeof parsed.output).toBe("string");
+
+    // optional fields present when usage data is available
+    expect(parsed).toHaveProperty("completionTokens");
+    expect(typeof parsed.completionTokens).toBe("number");
+    expect(parsed).toHaveProperty("tokensPerSecond");
+    expect(typeof parsed.tokensPerSecond).toBe("number");
+
+    // no extra keys beyond the documented shape
+    const keys = Object.keys(parsed);
+    expect(keys).toHaveLength(5);
+  });
+
+  it("JSON output omits optional fields when usage data is missing", async () => {
+    const fetchMock: typeof fetch = async () =>
+      new Response(
+        streamFrom([
+          'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+          "data: [DONE]\n\n"
+        ]),
+        { status: 200 }
+      );
+    const times = [0, 100, 300];
+
+    const result = await runCli(
+      ["--output", "json"],
+      {},
+      { fetch: fetchMock, now: () => times.shift() ?? 300 }
+    );
+
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+
+    // required fields still present
+    expect(parsed).toHaveProperty("timeToFirstTokenMs");
+    expect(parsed).toHaveProperty("totalTimeMs");
+    expect(parsed).toHaveProperty("output");
+
+    // optional fields omitted
+    expect(parsed).not.toHaveProperty("completionTokens");
+    expect(parsed).not.toHaveProperty("tokensPerSecond");
+
+    // only the three required keys
+    const keys = Object.keys(parsed);
+    expect(keys).toHaveLength(3);
+  });
+
+  it("CSV output always starts with the expected header columns", async () => {
+    const result = await runCli(["--output", "csv"], {}, benchmarkDependenciesForOutput("Hello"));
+    expect(result.exitCode).toBe(0);
+
+    const lines = result.stdout.trim().split("\n");
+    expect(lines).toHaveLength(2); // header + data row
+    expect(lines[0]).toBe(
+      "timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output"
+    );
+  });
+
+  it("CSV row with deterministic data matches golden snapshot", async () => {
+    // data that yields a round, integer tokensPerSecond value
+    const fetchMock: typeof fetch = async () =>
+      new Response(
+        streamFrom([
+          'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+          'data: {"choices":[],"usage":{"completion_tokens":4}}\n\n',
+          "data: [DONE]\n\n"
+        ]),
+        { status: 200 }
+      );
+    const times = [0, 200, 500]; // first token at 200 ms, total 500 ms → 8 tokens/sec
+
+    const result = await runCli(
+      ["--output", "csv"],
+      {},
+      { fetch: fetchMock, now: () => times.shift() ?? 500 }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatchInlineSnapshot(`
+      "timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output
+      200,500,4,8,Hi
+      "
+    `);
+  });
+
+  it("CSV output renders empty optional fields when usage data is missing", async () => {
+    const fetchMock: typeof fetch = async () =>
+      new Response(
+        streamFrom([
+          'data: {"choices":[{"delta":{"content":"X"}}]}\n\n',
+          "data: [DONE]\n\n"
+        ]),
+        { status: 200 }
+      );
+    const times = [0, 100, 300];
+
+    const result = await runCli(
+      ["--output", "csv"],
+      {},
+      { fetch: fetchMock, now: () => times.shift() ?? 300 }
+    );
+
+    expect(result.exitCode).toBe(0);
+
+    const lines = result.stdout.trim().split("\n");
+    expect(lines[0]).toBe(
+      "timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output"
+    );
+
+    const data = lines[1].split(",");
+    expect(data[0]).toBe("100");
+    expect(data[1]).toBe("300");
+    expect(data[2]).toBe(""); // no completion tokens
+    expect(data[3]).toBe(""); // no tokens per second
+    expect(data[4]).toBe("X"); // raw content
+  });
 });
