@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { helpText, measureQvacLatency, runCli } from "../src/cli.js";
 import { name } from "../src/index.js";
+import { findPromptFixture, promptFixtures, promptNames } from "../src/prompts.js";
 
 function streamFrom(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -41,10 +42,18 @@ describe("qvac-bench", () => {
     expect(name()).toBe("qvac-bench");
   });
 
+  it("exports basic prompt fixtures", () => {
+    expect(promptNames()).toEqual(["hello", "summary", "reasoning"]);
+    expect(promptFixtures).toHaveLength(3);
+    expect(findPromptFixture("summary")?.prompt).toContain("Summarize this");
+  });
+
   it("shows CLI help text", () => {
     expect(helpText).toContain("Usage: qvac-bench [options]");
     expect(helpText).toContain("--help");
     expect(helpText).toContain("--output");
+    expect(helpText).toContain("--prompt-name <name>");
+    expect(helpText).toContain("hello, summary, reasoning");
   });
 
   it("runs the CLI help command", async () => {
@@ -69,6 +78,44 @@ describe("qvac-bench", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("--output must be one of: text, json, csv");
     expect(result.stderr).toContain("Usage: qvac-bench [options]");
+  });
+
+  it("reports unknown named prompt fixtures", async () => {
+    const result = await runCli(["--prompt-name", "missing"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Unknown prompt fixture: missing");
+    expect(result.stderr).toContain("Available fixtures: hello, summary, reasoning");
+  });
+
+  it("runs a named prompt fixture", async () => {
+    let requestBody: unknown;
+    const fetchMock: typeof fetch = async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(
+        streamFrom([
+          'data: {"choices":[{"delta":{"content":"Done"}}]}\n\n',
+          'data: {"choices":[],"usage":{"completion_tokens":1}}\n\n',
+          "data: [DONE]\n\n"
+        ]),
+        { status: 200, statusText: "OK" }
+      );
+    };
+    const times = [0, 10, 20];
+
+    const result = await runCli(
+      ["--prompt-name", "reasoning"],
+      {},
+      {
+        fetch: fetchMock,
+        now: () => times.shift() ?? 20
+      }
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(requestBody).toMatchObject({
+      messages: [{ role: "user", content: findPromptFixture("reasoning")?.prompt }]
+    });
   });
 
   it("outputs benchmark results as JSON", async () => {

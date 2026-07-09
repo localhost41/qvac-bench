@@ -2,6 +2,7 @@
 
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { findPromptFixture, promptNames } from "./prompts.js";
 
 export const helpText = `Usage: qvac-bench [options]
 
@@ -13,6 +14,7 @@ Options:
                           Default: http://localhost:8000/v1/chat/completions
   --model <model>         Model name to request. Default: qvac
   --prompt <prompt>       Prompt to send. Default: Say hello in one short sentence.
+  --prompt-name <name>    Built-in prompt fixture to run: ${promptNames().join(", ")}
   --max-tokens <tokens>   Maximum tokens to generate. Default: 64
   --output <format>       Output format: text, json, or csv. Default: text
   --api-key <key>         Optional bearer token. Defaults to QVAC_API_KEY or OPENAI_API_KEY
@@ -92,6 +94,16 @@ function parseArgs(args: string[], env: NodeJS.ProcessEnv): BenchmarkOptions {
         options.prompt = readValue(args, index, arg);
         index += 1;
         break;
+      case "--prompt-name": {
+        const promptName = readValue(args, index, arg);
+        const fixture = findPromptFixture(promptName);
+        if (!fixture) {
+          throw new Error(`Unknown prompt fixture: ${promptName}. Available fixtures: ${promptNames().join(", ")}`);
+        }
+        options.prompt = fixture.prompt;
+        index += 1;
+        break;
+      }
       case "--max-tokens": {
         const rawValue = readValue(args, index, arg);
         const maxTokens = Number.parseInt(rawValue, 10);

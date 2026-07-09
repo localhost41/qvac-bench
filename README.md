@@ -36,6 +36,22 @@ qvac-bench \
   --max-tokens 64
 ```
 
+Run a built-in prompt fixture by name:
+
+```bash
+qvac-bench --prompt-name hello
+qvac-bench --prompt-name summary
+qvac-bench --prompt-name reasoning
+```
+
+Available prompt fixtures:
+
+| Name | Description |
+| --- | --- |
+| `hello` | Short greeting baseline. |
+| `summary` | Concise summarization baseline. |
+| `reasoning` | Small multi-step reasoning baseline. |
+
 The CLI prints time to first token, total generation time, completion tokens when the
 server includes streaming usage, and approximate tokens/sec when completion tokens
 are available. If the QVAC server is not running or the endpoint is unreachable, the
