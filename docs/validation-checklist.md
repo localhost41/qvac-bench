@@ -90,3 +90,4 @@ pipeline that does not have access to the real endpoint.
 7. If the run exits with a non‑zero code or produces unexpected output, refer to the [Failure Triage](#24-failure-triage) section for debugging guidance.
 
 **Example expected stdout (single iteration)**
+
