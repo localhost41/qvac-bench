@@ -74,11 +74,54 @@ The benchmark reports:
 - Approx tokens/sec: completion tokens divided by total generation time, when
   completion tokens are available.
 
-Cold starts and warm starts can produce very different numbers. The first request
-after starting a local QVAC server may include model loading, cache setup, or other
-one-time work. For more comparable warm-start results, send one unrecorded request
-first, then run the benchmark command several times with the same endpoint, model,
-prompt, and `--max-tokens` value.
+### Warm‑up, cold start, and measured runs
+
+Cold starts and warm starts yield different numbers because the first request may
+include model loading, cache setup, or other one‑time work. For **warm‑start**
+results:
+
+1. Start your QVAC server.
+2. Send an unrecorded warm‑up request with the same parameters you intend to measure:
+
+   ```bash
+   qvac-bench \
+     --url http://localhost:8000/v1/chat/completions \
+     --model qvac \
+     --prompt-name hello \
+     --max-tokens 64 > /dev/null
+   ```
+
+3. Run the measured benchmark one or more times:
+
+   ```bash
+   qvac-bench \
+     --url http://localhost:8000/v1/chat/completions \
+     --model qvac \
+     --prompt-name hello \
+     --max-tokens 64 \
+     --output json
+   ```
+
+For **cold‑start** results, simply omit the warm‑up request and run the measured
+benchmark immediately after starting the server.
+
+To increase confidence, repeat the measurement several times (e.g., 3–5 runs) and
+report the median and spread. Ensure no other heavy workloads are competing for
+CPU, GPU, or memory during the runs, and note any concurrent processes in the
+report.
+
+> **Report template:** A reusable report template that captures all the details
+> listed below is available at
+> [`docs/reports/template.md`](docs/reports/template.md).
+
+#### Approximate tokens/sec
+
+The “Approx tokens/sec” value is calculated as `completion_tokens` divided by
+`total_generation_time`. This figure is an **approximation** because total
+generation time includes network round‑trips, HTTP parsing, and server‑side
+overhead beyond pure token generation. Use it for relative comparisons under the
+same network conditions and infrastructure, not as a precise measure of model
+throughput.
 
 To reproduce a result:
 

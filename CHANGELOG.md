@@ -2,4 +2,4 @@
 
 ## Unreleased
 
-- Initial repository scaffold.
+- Add comprehensive production benchmarking methodology documentation and expand benchmark report template.
