@@ -17,6 +17,7 @@ Options:
   --prompt-name <name>    Built-in prompt fixture to run: ${promptNames().join(", ")}
   --max-tokens <tokens>   Maximum tokens to generate. Default: 64
   --iterations <count>    Number of repeated runs. Default: 1
+  --timeout-ms <ms>       Request timeout in milliseconds. Default: 30000
   --output <format>       Output format: text, json, or csv. Default: text
   --api-key <key>         Optional bearer token. Defaults to QVAC_API_KEY or OPENAI_API_KEY
 `;
@@ -35,6 +36,7 @@ export interface BenchmarkOptions {
   prompt: string;
   maxTokens: number;
   iterations?: number;
+  timeoutMs: number;
   outputFormat: OutputFormat;
   apiKey?: string;
 }
@@ -78,13 +80,30 @@ const defaultOptions: BenchmarkOptions = {
   prompt: "Say hello in one short sentence.",
   maxTokens: 64,
   iterations: 1,
+  timeoutMs: 30_000,
   outputFormat: "text"
 };
+
+type BenchmarkErrorCode = "server_unavailable" | "http_error" | "malformed_stream" | "timeout";
+
+class BenchmarkError extends Error {
+  constructor(
+    readonly code: BenchmarkErrorCode,
+    message: string
+  ) {
+    super(message);
+    this.name = "BenchmarkError";
+  }
+}
 
 function readValue(args: string[], index: number, option: string): string {
   const value = args[index + 1];
   if (!value || value.startsWith("-")) {
-    throw new Error(`Missing value for ${option}`);
+    const hint =
+      option === "--url" || option === "--model"
+        ? `. Provide ${option} <${option === "--url" ? "url" : "model"}> or omit ${option} to use the default.`
+        : "";
+    throw new Error(`Missing value for ${option}${hint}`);
   }
   return value;
 }
@@ -107,10 +126,16 @@ function parseArgs(args: string[], env: NodeJS.ProcessEnv): BenchmarkOptions {
     switch (arg) {
       case "--url":
         options.url = readValue(args, index, arg);
+        if (!options.url.trim()) {
+          throw new Error("Missing value for --url. Provide --url <url> or omit --url to use the default.");
+        }
         index += 1;
         break;
       case "--model":
         options.model = readValue(args, index, arg);
+        if (!options.model.trim()) {
+          throw new Error("Missing value for --model. Provide --model <model> or omit --model to use the default.");
+        }
         index += 1;
         break;
       case "--prompt":
@@ -147,6 +172,16 @@ function parseArgs(args: string[], env: NodeJS.ProcessEnv): BenchmarkOptions {
         index += 1;
         break;
       }
+      case "--timeout-ms": {
+        const rawValue = readValue(args, index, arg);
+        const timeoutMs = Number.parseInt(rawValue, 10);
+        if (!Number.isFinite(timeoutMs) || timeoutMs < 1) {
+          throw new Error("--timeout-ms must be a positive integer");
+        }
+        options.timeoutMs = timeoutMs;
+        index += 1;
+        break;
+      }
       case "--output":
         options.outputFormat = parseOutputFormat(readValue(args, index, arg));
         index += 1;
@@ -168,7 +203,11 @@ function parseStreamData(line: string): unknown {
   if (!data || data === "[DONE]") {
     return undefined;
   }
-  return JSON.parse(data);
+  try {
+    return JSON.parse(data);
+  } catch {
+    throw new BenchmarkError("malformed_stream", "stream sent malformed JSON data");
+  }
 }
 
 function readTokenDelta(value: unknown): string {
@@ -366,9 +405,53 @@ function formatRepeatedBenchmarkOutput(result: RepeatedBenchmarkResult, outputFo
   }
 }
 
-function formatUnavailableError(url: string, error: unknown): string {
-  const reason = error instanceof Error ? ` ${error.message}` : "";
-  return `QVAC server unavailable at ${url}. Is it running?${reason}\n`;
+function safeEndpointLabel(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = parsed.username ? "<redacted>" : "";
+    parsed.password = parsed.password ? "<redacted>" : "";
+    for (const key of [...parsed.searchParams.keys()]) {
+      if (/(api[-_]?key|authorization|auth|bearer|password|secret|token)/i.test(key)) {
+        parsed.searchParams.set(key, "<redacted>");
+      }
+    }
+    return parsed.toString().replaceAll("%3Credacted%3E", "<redacted>");
+  } catch {
+    return url.replace(/(api[-_]?key|authorization|auth|bearer|password|secret|token)=([^&\s]+)/gi, "$1=<redacted>");
+  }
+}
+
+function sanitizeErrorMessage(message: string): string {
+  return message
+    .replace(/authorization:\s*bearer\s+[^\s,;]+/gi, "authorization: Bearer <redacted>")
+    .replace(/bearer\s+[^\s,;]+/gi, "Bearer <redacted>")
+    .replace(/(api[-_]?key|authorization|auth|password|secret|token)=([^&\s]+)/gi, "$1=<redacted>");
+}
+
+function formatBenchmarkError(url: string, error: unknown): string {
+  const endpoint = safeEndpointLabel(url);
+  const reason = error instanceof Error ? ` ${sanitizeErrorMessage(error.message)}` : "";
+
+  if (error instanceof BenchmarkError) {
+    switch (error.code) {
+      case "http_error":
+        return `QVAC endpoint returned a non-2xx response at ${endpoint}.${reason}\n`;
+      case "malformed_stream":
+        return `QVAC endpoint returned a malformed stream at ${endpoint}.${reason}\n`;
+      case "timeout":
+        return `QVAC request timed out at ${endpoint}.${reason}\n`;
+      case "server_unavailable":
+        return `QVAC server unavailable at ${endpoint}. Is it running?${reason}\n`;
+    }
+  }
+
+  return `QVAC server unavailable at ${endpoint}. Is it running?${reason}\n`;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof DOMException && error.name === "AbortError"
+  ) || (error instanceof Error && error.name === "AbortError");
 }
 
 export async function measureQvacLatency(
@@ -384,52 +467,94 @@ export async function measureQvacLatency(
     headers.authorization = `Bearer ${options.apiKey}`;
   }
 
-  const response = await dependencies.fetch(options.url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model: options.model,
-      messages: [{ role: "user", content: options.prompt }],
-      max_tokens: options.maxTokens,
-      stream: true,
-      stream_options: { include_usage: true }
-    })
-  });
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => {
+    abortController.abort();
+  }, options.timeoutMs);
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} ${response.statusText}`.trim());
-  }
-  if (!response.body) {
-    throw new Error("response did not include a stream body");
-  }
+  try {
+    let response: Response;
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let output = "";
-  let firstTokenTime: number | undefined;
-  let completionTokens: number | undefined;
-
-  while (true) {
-    const readResult = await reader.read();
-    if (readResult.done) {
-      break;
+    try {
+      response = await dependencies.fetch(options.url, {
+        method: "POST",
+        headers,
+        signal: abortController.signal,
+        body: JSON.stringify({
+          model: options.model,
+          messages: [{ role: "user", content: options.prompt }],
+          max_tokens: options.maxTokens,
+          stream: true,
+          stream_options: { include_usage: true }
+        })
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new BenchmarkError("timeout", `No response within ${options.timeoutMs} ms.`);
+      }
+      throw new BenchmarkError(
+        "server_unavailable",
+        error instanceof Error ? error.message : "Request failed before receiving a response."
+      );
     }
 
-    buffer += decoder.decode(readResult.value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
+    if (!response.ok) {
+      throw new BenchmarkError("http_error", `HTTP ${response.status} ${response.statusText}`.trim());
+    }
+    if (!response.body) {
+      throw new BenchmarkError("malformed_stream", "response did not include a stream body");
+    }
 
-    for (const line of lines) {
-      if (!line.startsWith("data:")) {
-        continue;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let output = "";
+    let firstTokenTime: number | undefined;
+    let completionTokens: number | undefined;
+
+    while (true) {
+      let readResult: ReadableStreamReadResult<Uint8Array>;
+      try {
+        readResult = await reader.read();
+      } catch (error) {
+        if (isAbortError(error)) {
+          throw new BenchmarkError("timeout", `Stream did not finish within ${options.timeoutMs} ms.`);
+        }
+        throw new BenchmarkError(
+          "malformed_stream",
+          error instanceof Error ? error.message : "stream read failed"
+        );
+      }
+      if (readResult.done) {
+        break;
       }
 
-      const event = parseStreamData(line);
-      if (!event) {
-        continue;
-      }
+      buffer += decoder.decode(readResult.value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() ?? "";
 
+      for (const line of lines) {
+        if (!line.startsWith("data:")) {
+          continue;
+        }
+
+        const event = parseStreamData(line);
+        if (!event) {
+          continue;
+        }
+
+        completionTokens = readCompletionTokens(event) ?? completionTokens;
+        const tokenDelta = readTokenDelta(event);
+        if (tokenDelta) {
+          firstTokenTime ??= dependencies.now();
+          output += tokenDelta;
+        }
+      }
+    }
+
+    buffer += decoder.decode();
+    if (buffer.startsWith("data:")) {
+      const event = parseStreamData(buffer);
       completionTokens = readCompletionTokens(event) ?? completionTokens;
       const tokenDelta = readTokenDelta(event);
       if (tokenDelta) {
@@ -437,32 +562,25 @@ export async function measureQvacLatency(
         output += tokenDelta;
       }
     }
+
+    const totalTimeMs = dependencies.now() - startTime;
+    const timeToFirstTokenMs = (firstTokenTime ?? dependencies.now()) - startTime;
+    const generationSeconds = totalTimeMs / 1000;
+    const tokensPerSecond =
+      typeof completionTokens === "number" && generationSeconds > 0
+        ? completionTokens / generationSeconds
+        : undefined;
+
+    return {
+      timeToFirstTokenMs,
+      totalTimeMs,
+      completionTokens,
+      tokensPerSecond,
+      output
+    };
+  } finally {
+    clearTimeout(timeout);
   }
-
-  buffer += decoder.decode();
-  if (buffer.startsWith("data:")) {
-    const event = parseStreamData(buffer);
-    completionTokens = readCompletionTokens(event) ?? completionTokens;
-    const tokenDelta = readTokenDelta(event);
-    if (tokenDelta) {
-      firstTokenTime ??= dependencies.now();
-      output += tokenDelta;
-    }
-  }
-
-  const totalTimeMs = dependencies.now() - startTime;
-  const timeToFirstTokenMs = (firstTokenTime ?? dependencies.now()) - startTime;
-  const generationSeconds = totalTimeMs / 1000;
-  const tokensPerSecond =
-    typeof completionTokens === "number" && generationSeconds > 0 ? completionTokens / generationSeconds : undefined;
-
-  return {
-    timeToFirstTokenMs,
-    totalTimeMs,
-    completionTokens,
-    tokensPerSecond,
-    output
-  };
 }
 
 export async function measureRepeatedQvacLatency(
@@ -526,7 +644,7 @@ export async function runCli(
   } catch (error) {
     return {
       stdout: "",
-      stderr: formatUnavailableError(options.url, error),
+      stderr: formatBenchmarkError(options.url, error),
       exitCode: 1
     };
   }

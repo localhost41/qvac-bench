@@ -175,6 +175,7 @@ describe("qvac-bench", () => {
     expect(helpText).toContain("--output");
     expect(helpText).toContain("--prompt-name <name>");
     expect(helpText).toContain("--iterations <count>");
+    expect(helpText).toContain("--timeout-ms <ms>");
     expect(helpText).toContain("hello, summary, reasoning");
   });
 
@@ -194,6 +195,20 @@ describe("qvac-bench", () => {
     expect(result.stderr).toContain("Usage: qvac-bench [options]");
   });
 
+  it("reports missing endpoint and model option values", async () => {
+    const missingUrl = await runCli(["--url"]);
+    const missingModel = await runCli(["--model"]);
+
+    expect(missingUrl.exitCode).toBe(1);
+    expect(missingUrl.stderr).toContain("Missing value for --url");
+    expect(missingUrl.stderr).toContain("Provide --url <url>");
+    expect(missingUrl.stderr).toContain("Usage: qvac-bench [options]");
+    expect(missingModel.exitCode).toBe(1);
+    expect(missingModel.stderr).toContain("Missing value for --model");
+    expect(missingModel.stderr).toContain("Provide --model <model>");
+    expect(missingModel.stderr).toContain("Usage: qvac-bench [options]");
+  });
+
   it("reports unsupported CLI output formats", async () => {
     const result = await runCli(["--output", "xml"]);
 
@@ -207,6 +222,14 @@ describe("qvac-bench", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("--iterations must be a positive integer");
+    expect(result.stderr).toContain("Usage: qvac-bench [options]");
+  });
+
+  it("reports invalid timeout values", async () => {
+    const result = await runCli(["--timeout-ms", "0"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("--timeout-ms must be a positive integer");
     expect(result.stderr).toContain("Usage: qvac-bench [options]");
   });
 
@@ -536,6 +559,7 @@ describe("qvac-bench", () => {
         prompt: "hello",
         maxTokens: 8,
         iterations: 1,
+        timeoutMs: 30_000,
         outputFormat: "text",
         apiKey: "test-key"
       },
@@ -554,19 +578,87 @@ describe("qvac-bench", () => {
     });
   });
 
-  it("reports unavailable QVAC server errors clearly", async () => {
+  it("reports unavailable QVAC server errors clearly without leaking secrets", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
-        throw new Error("connect ECONNREFUSED 127.0.0.1:8000");
+        throw new Error("connect ECONNREFUSED 127.0.0.1:8000 Authorization: Bearer secret-token");
       })
     );
 
-    const result = await runCli(["--url", "http://127.0.0.1:8000/v1/chat/completions"]);
+    const result = await runCli([
+      "--url",
+      "http://127.0.0.1:8000/v1/chat/completions?api_key=url-secret",
+      "--api-key",
+      "secret-token"
+    ]);
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("QVAC server unavailable at http://127.0.0.1:8000/v1/chat/completions.");
+    expect(result.stderr).toContain(
+      "QVAC server unavailable at http://127.0.0.1:8000/v1/chat/completions?api_key=<redacted>."
+    );
     expect(result.stderr).toContain("Is it running?");
     expect(result.stderr).toContain("ECONNREFUSED");
+    expect(result.stderr).not.toContain("secret-token");
+    expect(result.stderr).not.toContain("url-secret");
+  });
+
+  it("reports non-2xx endpoint responses distinctly", async () => {
+    const result = await runCli(
+      ["--url", "http://localhost:8000/v1/chat/completions", "--api-key", "secret-token"],
+      {},
+      {
+        fetch: async () =>
+          new Response(streamFrom(["not used"]), {
+            status: 401,
+            statusText: "Unauthorized Bearer secret-token"
+          }),
+        now: () => 0
+      }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("QVAC endpoint returned a non-2xx response");
+    expect(result.stderr).toContain("HTTP 401 Unauthorized Bearer <redacted>");
+    expect(result.stderr).not.toContain("secret-token");
+  });
+
+  it("reports malformed streams distinctly", async () => {
+    const result = await runCli(
+      ["--url", "http://localhost:8000/v1/chat/completions"],
+      {},
+      {
+        fetch: async () =>
+          new Response(streamFrom(["data: not-json\n\n"]), {
+            status: 200,
+            statusText: "OK"
+          }),
+        now: () => 0
+      }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("QVAC endpoint returned a malformed stream");
+    expect(result.stderr).toContain("stream sent malformed JSON data");
+  });
+
+  it("reports request timeouts distinctly", async () => {
+    const result = await runCli(
+      ["--url", "http://localhost:8000/v1/chat/completions", "--timeout-ms", "1"],
+      {},
+      {
+        fetch: (_input, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(new DOMException("The operation was aborted.", "AbortError"));
+            });
+          }),
+        now: () => 0
+      }
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("QVAC request timed out");
+    expect(result.stderr).toContain("No response within 1 ms");
   });
 });

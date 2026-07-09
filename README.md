@@ -34,6 +34,7 @@ qvac-bench \
   --model qvac \
   --prompt "Say hello in one short sentence." \
   --max-tokens 64 \
+  --timeout-ms 30000 \
   --iterations 5
 ```
 
@@ -58,8 +59,30 @@ server includes streaming usage, and approximate tokens/sec when completion toke
 are available. With `--iterations` greater than `1`, it repeats the same request and
 prints min, median, max, and p95 summaries for time to first token and total
 generation time. Tokens/sec summaries are included when the endpoint reports
-completion token counts. If the QVAC server is not running or the endpoint is
-unreachable, the CLI exits non-zero with a clear unavailable-server message.
+completion token counts.
+
+## Troubleshooting
+
+The CLI exits non-zero for validation and endpoint failures. Authentication
+values from `--api-key`, `QVAC_API_KEY`, `OPENAI_API_KEY`, bearer headers, and
+sensitive URL query parameters are redacted from error output.
+
+- Missing option values include help text, for example:
+  `Missing value for --url. Provide --url <url> or omit --url to use the default.`
+  and
+  `Missing value for --model. Provide --model <model> or omit --model to use the default.`
+- If the QVAC server is not running or the endpoint cannot be reached, the CLI
+  prints: `QVAC server unavailable at <endpoint>. Is it running? <reason>`
+- If the server responds with an error status, the CLI prints:
+  `QVAC endpoint returned a non-2xx response at <endpoint>. HTTP <status> <status text>`
+  Check that the URL points to `/v1/chat/completions`, the model is loaded, and
+  any required bearer token is valid.
+- If the response is not an OpenAI-compatible streaming body, the CLI prints:
+  `QVAC endpoint returned a malformed stream at <endpoint>. <reason>` Check that
+  the server is returning `data:` server-sent event chunks with JSON payloads.
+- If the request or stream exceeds the timeout, the CLI prints:
+  `QVAC request timed out at <endpoint>. <reason>` Increase `--timeout-ms` for
+  cold starts or first model loads.
 
 ## CI validation
 
