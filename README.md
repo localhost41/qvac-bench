@@ -2,6 +2,9 @@
 
 Public QVAC developer tooling from LocalHost Labs.
 
+> **Alpha status**: This package is an **alpha preview** – APIs and behaviour may change without notice.
+> Do **not** rely on stability for production. For bug reports and feedback, open an issue.
+
 ## Local development
 
 ```bash
@@ -10,6 +13,29 @@ pnpm lint
 pnpm test
 pnpm build
 ```
+
+After building you can run the CLI directly:
+
+```bash
+node dist/cli.js --help
+```
+
+To verify the package can be packed for distribution (for example, before publishing):
+
+```bash
+pnpm pack --dry-run
+```
+
+To install the alpha binary globally for easier use:
+
+```bash
+# within the repo directory
+pnpm link --global
+# now you can run
+qvac-bench --help
+```
+
+Alternatively, create an alias or add `node dist/cli.js` to your PATH.
 
 ## CLI
 
