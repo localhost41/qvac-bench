@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 import { helpText, measureQvacLatency, runCli } from "../src/cli.js";
 import { name } from "../src/index.js";
 import { findPromptFixture, promptFixtures, promptNames } from "../src/prompts.js";
+import { createServer } from "http";
+import type { AddressInfo } from "net";
 
 function streamFrom(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -34,6 +36,54 @@ function benchmarkDependenciesForOutput(output: string) {
 }
 
 describe("qvac-bench", () => {
+  let mockServer: ReturnType<typeof createServer>;
+  let mockPort = 0;
+  let mockBaseUrl = "";
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve) => {
+      mockServer = createServer((_req, res) => {
+        if (_req.url === "/v1/chat/completions" && _req.method === "POST") {
+          const chunks = [
+            'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+            'data: {"choices":[],"usage":{"completion_tokens":2}}\n\n',
+            "data: [DONE]\n\n"
+          ];
+
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+          });
+
+          for (const chunk of chunks) {
+            res.write(chunk);
+          }
+
+          res.end();
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      });
+
+      mockServer.listen(0, () => {
+        const addr = mockServer.address() as AddressInfo;
+        mockPort = addr.port;
+        mockBaseUrl = `http://127.0.0.1:${mockPort}`;
+        resolve();
+      });
+    });
+  });
+
+  afterAll(async () => {
+    if (mockServer) {
+      await new Promise<void>((resolve, reject) => {
+        mockServer.close((err) => (err ? reject(err) : resolve()));
+      });
+    }
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -210,5 +260,27 @@ describe("qvac-bench", () => {
     expect(result.stderr).toContain("QVAC server unavailable at http://127.0.0.1:8000/v1/chat/completions.");
     expect(result.stderr).toContain("Is it running?");
     expect(result.stderr).toContain("ECONNREFUSED");
+  });
+
+  it("smoke-tests the CLI against a mock streaming endpoint", async () => {
+    const result = await runCli([
+      "--url", `${mockBaseUrl}/v1/chat/completions`,
+      "--output", "json",
+      "--prompt", "test"
+    ]);
+
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toHaveProperty("timeToFirstTokenMs");
+    expect(parsed).toHaveProperty("totalTimeMs");
+    expect(parsed).toHaveProperty("completionTokens");
+    expect(parsed).toHaveProperty("tokensPerSecond");
+    expect(parsed.output).toBeTruthy();
+
+    expect(parsed.timeToFirstTokenMs).toBeGreaterThan(0);
+    expect(parsed.totalTimeMs).toBeGreaterThan(0);
+    expect(parsed.totalTimeMs).toBeGreaterThanOrEqual(parsed.timeToFirstTokenMs);
+    expect(parsed.completionTokens).toBeGreaterThanOrEqual(1);
+    expect(parsed.tokensPerSecond).toBeGreaterThan(0);
   });
 });

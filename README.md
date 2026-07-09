@@ -114,3 +114,14 @@ qvac-bench --output csv
 
 If your local endpoint requires a bearer token, pass `--api-key` or set
 `QVAC_API_KEY` or `OPENAI_API_KEY`.
+
+## Testing
+
+The test suite includes smoke tests that exercise the CLI against a lightweight
+mock OpenAI‑compatible streaming endpoint built into the test harness. These tests
+verify that time‑to‑first‑token, total generation time, and tokens‑per‑second are
+output and produce reasonable values without requiring a real QVAC server. CI runs
+this suite with no external network dependencies.
+
+To validate against a real QVAC server, run the benchmark manually against your
+local endpoint as described above.
