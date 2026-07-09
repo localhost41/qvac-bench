@@ -57,6 +57,54 @@ server includes streaming usage, and approximate tokens/sec when completion toke
 are available. If the QVAC server is not running or the endpoint is unreachable, the
 CLI exits non-zero with a clear unavailable-server message.
 
+## Methodology
+
+`qvac-bench` sends one OpenAI-compatible streaming chat completion request to the
+configured endpoint. The request includes the selected model, prompt, `max_tokens`,
+`stream: true`, and `stream_options: { include_usage: true }`.
+
+The benchmark reports:
+
+- Time to first token: elapsed time from starting the HTTP request until the first
+  non-empty streamed content delta is received.
+- Total generation time: elapsed time from starting the HTTP request until the
+  stream finishes.
+- Completion tokens: the server-reported `usage.completion_tokens` value, when the
+  server includes streaming usage.
+- Approx tokens/sec: completion tokens divided by total generation time, when
+  completion tokens are available.
+
+Cold starts and warm starts can produce very different numbers. The first request
+after starting a local QVAC server may include model loading, cache setup, or other
+one-time work. For more comparable warm-start results, send one unrecorded request
+first, then run the benchmark command several times with the same endpoint, model,
+prompt, and `--max-tokens` value.
+
+To reproduce a result:
+
+1. Start the same QVAC server build and model locally.
+2. Install dependencies and build the CLI:
+
+   ```bash
+   pnpm install
+   pnpm build
+   ```
+
+3. Run the benchmark with explicit inputs:
+
+   ```bash
+   qvac-bench \
+     --url http://localhost:8000/v1/chat/completions \
+     --model qvac \
+     --prompt-name hello \
+     --max-tokens 64 \
+     --output json
+   ```
+
+4. Record the command, QVAC server version or commit, model name, prompt or prompt
+   fixture, `--max-tokens`, output format, machine type, and whether the run was
+   cold-start or warm-start.
+
 Use `--output json` or `--output csv` for machine-readable benchmark results:
 
 ```bash
