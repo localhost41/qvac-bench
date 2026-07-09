@@ -10,9 +10,10 @@
   },
   "files": ["dist", "README.md", "CHANGELOG.md"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
     "test": "vitest run test",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "verify:package": "pnpm lint && pnpm test && pnpm build && node scripts/verify-package.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
