@@ -41,5 +41,12 @@ server includes streaming usage, and approximate tokens/sec when completion toke
 are available. If the QVAC server is not running or the endpoint is unreachable, the
 CLI exits non-zero with a clear unavailable-server message.
 
+Use `--output json` or `--output csv` for machine-readable benchmark results:
+
+```bash
+qvac-bench --output json
+qvac-bench --output csv
+```
+
 If your local endpoint requires a bearer token, pass `--api-key` or set
 `QVAC_API_KEY` or `OPENAI_API_KEY`.
