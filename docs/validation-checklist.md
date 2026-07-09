@@ -87,5 +87,6 @@ pipeline that does not have access to the real endpoint.
      must be present.
 5. Inspect stderr; it must be empty for a successful run.
 6. Confirm that the exit code is `0`.
+7. If the run exits with a non‑zero code or produces unexpected output, refer to the [Failure Triage](#24-failure-triage) section for debugging guidance.
 
 **Example expected stdout (single iteration)**
