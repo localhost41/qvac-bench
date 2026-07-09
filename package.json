@@ -1,0 +1,20 @@
+{
+  "name": "@localhostlabs/qvac-bench",
+  "version": "0.1.0-alpha.0",
+  "description": "QVAC developer tooling package: qvac-bench",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "README.md", "CHANGELOG.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  },
+  "packageManager": "pnpm@11.10.0"
+}
