@@ -25,3 +25,21 @@ Available command:
 ```bash
 qvac-bench --help
 ```
+
+Benchmark a local QVAC OpenAI-compatible streaming endpoint:
+
+```bash
+qvac-bench \
+  --url http://localhost:8000/v1/chat/completions \
+  --model qvac \
+  --prompt "Say hello in one short sentence." \
+  --max-tokens 64
+```
+
+The CLI prints time to first token, total generation time, completion tokens when the
+server includes streaming usage, and approximate tokens/sec when completion tokens
+are available. If the QVAC server is not running or the endpoint is unreachable, the
+CLI exits non-zero with a clear unavailable-server message.
+
+If your local endpoint requires a bearer token, pass `--api-key` or set
+`QVAC_API_KEY` or `OPENAI_API_KEY`.
