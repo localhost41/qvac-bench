@@ -91,3 +91,46 @@ pipeline that does not have access to the real endpoint.
 
 **Example expected stdout (single iteration)**
 
+### 2.4 Failure Triage
+
+When a real-QVAC run exits with a non-zero code or produces unexpected output,
+use the following checks to isolate the cause. Error output should be sanitized;
+do not share raw credentials or unredacted logs.
+
+1. **Validate connectivity** - Verify the endpoint URL from the same machine:
+   ```bash
+   curl -v "$QVAC_URL"
+   ```
+   If the host cannot be reached, check DNS, VPN, firewall, and proxy settings.
+
+2. **Confirm endpoint shape** - Make sure the URL points at the expected
+   OpenAI-compatible chat completions path, commonly `/v1/chat/completions`.
+
+3. **Check authentication** - Confirm `QVAC_API_KEY` or `OPENAI_API_KEY` is
+   exported, current, and allowed to use the selected model. HTTP `401` or
+   `403` errors usually indicate missing, expired, or unauthorized credentials.
+
+4. **Verify the model name** - Ensure the value passed to `--model` is
+   available on the target endpoint. Query the provider's model list when one
+   is available.
+
+5. **Inspect common error codes**:
+   - `server_unavailable`: the upstream host could not be reached.
+   - `http_error`: the endpoint returned a non-2xx HTTP status.
+   - `malformed_stream`: the endpoint returned unexpected or invalid SSE data.
+   - `timeout`: the request took longer than the configured timeout.
+
+6. **Reduce the request** - Retry with a short prompt and a small token budget:
+   ```bash
+   node dist/cli.js --url "$QVAC_URL" --model "$QVAC_MODEL" --prompt "Hello" --max-tokens 10
+   ```
+
+7. **Capture sanitized diagnostics** - Save stdout and stderr separately:
+   ```bash
+   node dist/cli.js --url "$QVAC_URL" --model "$QVAC_MODEL" > out.txt 2> err.txt
+   ```
+   Confirm `err.txt` does not contain raw API keys before sharing it.
+
+8. **Compare with a raw request** - If the CLI still fails, use `curl --no-buffer`
+   against the same endpoint. If the raw request fails too, the issue is likely
+   endpoint, credential, or network related rather than a `qvac-bench` bug.
