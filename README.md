@@ -10,3 +10,18 @@ pnpm lint
 pnpm test
 pnpm build
 ```
+
+## CLI
+
+Run the local CLI after building:
+
+```bash
+pnpm build
+node dist/cli.js --help
+```
+
+Available command:
+
+```bash
+qvac-bench --help
+```
