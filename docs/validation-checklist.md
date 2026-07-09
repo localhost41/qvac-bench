@@ -91,6 +91,13 @@ pipeline that does not have access to the real endpoint.
 
 **Example expected stdout (single iteration)**
 
+```text
+Time to first token: 312 ms
+Total generation time: 1240 ms
+Completion tokens: 42
+Approx tokens/sec: 33.87
+```
+
 ### 2.4 Failure Triage
 
 When a real-QVAC run exits with a non-zero code or produces unexpected output,
