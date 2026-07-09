@@ -1,0 +1,31 @@
+
+### 2.4 Failure Triage
+
+When a real QVAC run exits abnormally, use the following common symptom‑resolution pairs to diagnose the problem.
+
+- **Connection refused / `ECONNREFUSED`**  
+  The endpoint cannot be reached.  
+  *Action*: verify the QVAC URL is correct and that the server is listening. Try `curl "$QVAC_URL"` from the same machine.
+
+- **HTTP 401 / 403 (Unauthorized / Forbidden)**  
+  The API key is missing, invalid, or does not have permission for the selected model.  
+  *Action*: double‑check that `QVAC_API_KEY` is exported and has not expired. Confirm the key’s allowed models in the QVAC console.
+
+- **Malformed stream / JSON parse errors**  
+  The server returned non‑SSE content or malformed JSON.  
+  *Action*: ensure the endpoint path ends with `/v1/chat/completions`. Capture the raw response with `curl --no-buffer "$QVAC_URL" …` to inspect the exact bytes.
+
+- **Timeout (`timeout` error)**  
+  The server did not respond within the allotted time.  
+  *Action*: increase `--timeout-ms` to give the server more time. Reduce `--max-tokens` or switch to a simpler prompt to shorten the generation.
+
+- **Non‑zero exit without output**  
+  The tool ended abruptly but printed nothing to stdout.  
+  *Action*: rerun with `--output json` to see a machine‑readable error. Check stderr for sanitised messages (API keys are redacted).
+
+If the error persists after following the steps above, gather the sanitised output, the exact command used, and any relevant environment details, then file an issue in the repository.
+
+---
+
+> **Notice**  
+> All items marked **[UNRESOLVED]** still require manual execution on the actual hardware / environment listed. This document is a living checklist; update the “Pass?” column and add a date when a check is confirmed.
