@@ -57,6 +57,14 @@ server includes streaming usage, and approximate tokens/sec when completion toke
 are available. If the QVAC server is not running or the endpoint is unreachable, the
 CLI exits non-zero with a clear unavailable-server message.
 
+## CI validation
+
+CI runs a smoke test against a lightweight local mock OpenAI-compatible streaming
+endpoint. This verifies CLI behavior, streaming parsing, time to first token, total
+duration, and approximate tokens/sec without requiring network access or a live
+QVAC server. Real QVAC server validation should be run separately against the
+target QVAC build and model.
+
 ## Methodology
 
 `qvac-bench` sends one OpenAI-compatible streaming chat completion request to the
