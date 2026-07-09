@@ -14,6 +14,7 @@ Options:
   --model <model>         Model name to request. Default: qvac
   --prompt <prompt>       Prompt to send. Default: Say hello in one short sentence.
   --max-tokens <tokens>   Maximum tokens to generate. Default: 64
+  --output <format>       Output format: text, json, or csv. Default: text
   --api-key <key>         Optional bearer token. Defaults to QVAC_API_KEY or OPENAI_API_KEY
 `;
 
@@ -23,11 +24,14 @@ export interface CliResult {
   exitCode: number;
 }
 
+export type OutputFormat = "text" | "json" | "csv";
+
 export interface BenchmarkOptions {
   url: string;
   model: string;
   prompt: string;
   maxTokens: number;
+  outputFormat: OutputFormat;
   apiKey?: string;
 }
 
@@ -39,7 +43,7 @@ export interface BenchmarkResult {
   output: string;
 }
 
-interface BenchmarkDependencies {
+export interface BenchmarkDependencies {
   fetch: typeof fetch;
   now: () => number;
 }
@@ -48,7 +52,8 @@ const defaultOptions: BenchmarkOptions = {
   url: "http://localhost:8000/v1/chat/completions",
   model: "qvac",
   prompt: "Say hello in one short sentence.",
-  maxTokens: 64
+  maxTokens: 64,
+  outputFormat: "text"
 };
 
 function readValue(args: string[], index: number, option: string): string {
@@ -57,6 +62,13 @@ function readValue(args: string[], index: number, option: string): string {
     throw new Error(`Missing value for ${option}`);
   }
   return value;
+}
+
+function parseOutputFormat(value: string): OutputFormat {
+  if (value === "text" || value === "json" || value === "csv") {
+    return value;
+  }
+  throw new Error("--output must be one of: text, json, csv");
 }
 
 function parseArgs(args: string[], env: NodeJS.ProcessEnv): BenchmarkOptions {
@@ -90,6 +102,10 @@ function parseArgs(args: string[], env: NodeJS.ProcessEnv): BenchmarkOptions {
         index += 1;
         break;
       }
+      case "--output":
+        options.outputFormat = parseOutputFormat(readValue(args, index, arg));
+        index += 1;
+        break;
       case "--api-key":
         options.apiKey = readValue(args, index, arg);
         index += 1;
@@ -165,6 +181,45 @@ function formatBenchmark(result: BenchmarkResult): string {
   lines.push(`Output: ${result.output || "(empty)"}`);
 
   return `${lines.join("\n")}\n`;
+}
+
+function formatJsonBenchmark(result: BenchmarkResult): string {
+  return `${JSON.stringify(result, null, 2)}\n`;
+}
+
+function formatCsvValue(value: string | number | undefined): string {
+  if (typeof value === "undefined") {
+    return "";
+  }
+
+  const text = String(value);
+  if (/[",\r\n]/.test(text)) {
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+  return text;
+}
+
+function formatCsvBenchmark(result: BenchmarkResult): string {
+  const columns: (keyof BenchmarkResult)[] = [
+    "timeToFirstTokenMs",
+    "totalTimeMs",
+    "completionTokens",
+    "tokensPerSecond",
+    "output"
+  ];
+  const values = columns.map((column) => formatCsvValue(result[column]));
+  return `${columns.join(",")}\n${values.join(",")}\n`;
+}
+
+function formatBenchmarkOutput(result: BenchmarkResult, outputFormat: OutputFormat): string {
+  switch (outputFormat) {
+    case "json":
+      return formatJsonBenchmark(result);
+    case "csv":
+      return formatCsvBenchmark(result);
+    case "text":
+      return formatBenchmark(result);
+  }
 }
 
 function formatUnavailableError(url: string, error: unknown): string {
@@ -266,7 +321,11 @@ export async function measureQvacLatency(
   };
 }
 
-export async function runCli(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<CliResult> {
+export async function runCli(
+  args: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  dependencies?: BenchmarkDependencies
+): Promise<CliResult> {
   if (args.includes("--help") || args.includes("-h")) {
     return {
       stdout: helpText,
@@ -288,9 +347,9 @@ export async function runCli(args: string[], env: NodeJS.ProcessEnv = process.en
   }
 
   try {
-    const result = await measureQvacLatency(options);
+    const result = await measureQvacLatency(options, dependencies);
     return {
-      stdout: formatBenchmark(result),
+      stdout: formatBenchmarkOutput(result, options.outputFormat),
       stderr: "",
       exitCode: 0
     };
