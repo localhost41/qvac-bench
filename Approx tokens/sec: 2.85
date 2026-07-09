@@ -1,0 +1,23 @@
+
+> **Note:** When `--iterations` > 1, the output also includes per‑metric summary
+> lines (min, median, max, p95) for time‑to‑first‑token, total generation time,
+> and (if available) tokens‑per‑second.
+
+### 2.4 Failure Triage
+
+If a real‑QVAC validation run exits with a non‑zero code or produces unexpected
+output, use the table below to diagnose the most common failures.
+
+| Symptom | Likely cause | Suggested action |
+| --- | --- | --- |
+| `QVAC endpoint returned a non‑2xx response` | Server unavailable or misconfigured URL | Verify the endpoint URL is correct and reachable from your machine (e.g., `curl` the URL). If the server is behind a VPN or firewall, ensure you are connected. |
+| `QVAC endpoint returned a malformed stream` | The server sent invalid Server‑Sent Events data | Retry the request; if the issue persists, report the event to the server administrator. |
+| `Server did not respond before the timeout` | Network latency or a very slow model | Increase `--timeout` or try a shorter prompt/max‑tokens combination. |
+| `Missing value for --url` / `Missing value for --model` | Required CLI flags omitted | Provide `--url` and `--model` as described in the command examples. |
+| Authentication errors (401 / 403) | Invalid or missing API key | Check that the `QVAC_API_KEY` (or `OPENAI_API_KEY`) environment variable is set and export it in the shell before running the command. |
+| `Error: fetch failed` / `TypeError` | Node.js runtime or network issue | Make sure you are on Node.js 20 LTS or later and that no proxy/firewall blocks outbound HTTPS. |
+
+For any persistent failure, reproduce the command with `--output json` and
+inspect the full structured output for further clues.  You can also enable
+verbose logging (if available in a future version) by setting
+`DEBUG=qvac:*`.
