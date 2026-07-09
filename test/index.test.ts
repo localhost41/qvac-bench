@@ -14,6 +14,24 @@ function streamFrom(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
+function benchmarkDependenciesForOutput(output: string) {
+  const fetchMock: typeof fetch = async () =>
+    new Response(
+      streamFrom([
+        `data: {"choices":[{"delta":{"content":${JSON.stringify(output)}}}]}\n\n`,
+        'data: {"choices":[],"usage":{"completion_tokens":4}}\n\n',
+        "data: [DONE]\n\n"
+      ]),
+      { status: 200, statusText: "OK" }
+    );
+  const times = [0, 125, 500];
+
+  return {
+    fetch: fetchMock,
+    now: () => times.shift() ?? 500
+  };
+}
+
 describe("qvac-bench", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -26,6 +44,7 @@ describe("qvac-bench", () => {
   it("shows CLI help text", () => {
     expect(helpText).toContain("Usage: qvac-bench [options]");
     expect(helpText).toContain("--help");
+    expect(helpText).toContain("--output");
   });
 
   it("runs the CLI help command", async () => {
@@ -42,6 +61,41 @@ describe("qvac-bench", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Unknown option: --unknown");
     expect(result.stderr).toContain("Usage: qvac-bench [options]");
+  });
+
+  it("reports unsupported CLI output formats", async () => {
+    const result = await runCli(["--output", "xml"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("--output must be one of: text, json, csv");
+    expect(result.stderr).toContain("Usage: qvac-bench [options]");
+  });
+
+  it("outputs benchmark results as JSON", async () => {
+    const result = await runCli(["--output", "json"], {}, benchmarkDependenciesForOutput("Hello"));
+
+    expect(result).toMatchObject({
+      stderr: "",
+      exitCode: 0
+    });
+    expect(JSON.parse(result.stdout)).toEqual({
+      timeToFirstTokenMs: 125,
+      totalTimeMs: 500,
+      completionTokens: 4,
+      tokensPerSecond: 8,
+      output: "Hello"
+    });
+  });
+
+  it("outputs benchmark results as CSV", async () => {
+    const result = await runCli(["--output", "csv"], {}, benchmarkDependenciesForOutput('Hello, "qvac"'));
+
+    expect(result).toEqual({
+      stdout:
+        'timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output\n125,500,4,8,"Hello, ""qvac"""\n',
+      stderr: "",
+      exitCode: 0
+    });
   });
 
   it("measures first token time, total time, and tokens per second from a streaming response", async () => {
@@ -77,6 +131,7 @@ describe("qvac-bench", () => {
         model: "qvac-local",
         prompt: "hello",
         maxTokens: 8,
+        outputFormat: "text",
         apiKey: "test-key"
       },
       {
