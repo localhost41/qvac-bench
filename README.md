@@ -108,6 +108,9 @@ target QVAC build and model.
 `qvac-bench` sends one or more OpenAI-compatible streaming chat completion requests
 to the configured endpoint. Each request includes the selected model, prompt,
 `max_tokens`, `stream: true`, and `stream_options: { include_usage: true }`.
+Use the [benchmark report template](docs/reports/template.md) when publishing or
+sharing results so the command, system, model, and known limitations are recorded
+next to the numbers.
 
 The benchmark reports:
 
@@ -128,17 +131,86 @@ When `--iterations` is greater than `1`, the summary reports:
 - Max: slowest observed value.
 - p95: nearest-rank 95th percentile after sorting.
 
-Use repeated runs to compare warm performance across the same endpoint, model,
-prompt, and `--max-tokens` value. Time to first token is most useful for perceived
-responsiveness. Total generation time captures end-to-end streamed completion
-duration. Tokens/sec is approximate because it depends on server-reported completion
-token counts and uses total generation time as the denominator.
+Time to first token is most useful for perceived responsiveness. Total generation
+time captures end-to-end streamed completion duration. Tokens/sec is approximate
+because it depends on server-reported completion token counts and uses total
+generation time as the denominator.
 
-Cold starts and warm starts can produce very different numbers. The first request
-after starting a local QVAC server may include model loading, cache setup, or other
-one-time work. For more comparable warm-start results, send one unrecorded request
-first, then run the benchmark command several times with the same endpoint, model,
-prompt, and `--max-tokens` value.
+### Production benchmark guidance
+
+Public benchmark results should keep the benchmark setup fixed and documented.
+Changing the server build, model, quantization, prompt, `--max-tokens`, or machine
+load between runs can move the numbers enough to make comparisons misleading.
+
+- Warmup vs measured runs: run at least one unrecorded warmup request before
+  collecting warm-start results. Use the same endpoint, model, prompt, and
+  `--max-tokens` value for warmup and measurement. Increase `--iterations` for the
+  measured command instead of mixing separate one-off runs.
+- Cold start vs warm start: label results clearly. A cold-start run starts from a
+  freshly launched QVAC server and may include model loading, memory mapping, cache
+  setup, compilation, or other one-time work. A warm-start run measures after the
+  model is already loaded and a matching warmup request has completed.
+- Hardware notes: record the device, OS, CPU, GPU or accelerator, RAM, power mode,
+  thermal constraints, and whether the machine was plugged in. For shared or cloud
+  systems, record the instance type and any visible resource limits.
+- Model and quantization notes: record the exact model identifier, quantization,
+  context length, runtime or server version, QVAC commit or build, and any relevant
+  runtime flags. Do not compare different model files or quantization levels as if
+  they were the same benchmark target.
+- Background load: close unrelated CPU, GPU, and disk-heavy work where practical.
+  Record meaningful background load, including other inference servers, indexing
+  jobs, downloads, video calls, browser tabs, or container workloads.
+- Repeated local runs: run the same measured command multiple times when publishing
+  important numbers. Report the command, summary statistics, and any discarded
+  outliers with the reason they were discarded.
+
+Recommended repeatable local QVAC flow:
+
+```bash
+# 1. Build the CLI.
+pnpm install
+pnpm build
+
+# 2. Start the QVAC server and load the target model in another terminal.
+
+# 3. Warm the endpoint once without recording the result.
+node dist/cli.js \
+  --url http://localhost:8000/v1/chat/completions \
+  --model qvac \
+  --prompt-name hello \
+  --max-tokens 64 \
+  --timeout-ms 60000 \
+  --iterations 1 \
+  --output json
+
+# 4. Run the measured benchmark with the same inputs.
+node dist/cli.js \
+  --url http://localhost:8000/v1/chat/completions \
+  --model qvac \
+  --prompt-name hello \
+  --max-tokens 64 \
+  --timeout-ms 60000 \
+  --iterations 10 \
+  --output json
+```
+
+For a cold-start result, restart the QVAC server immediately before the measured
+command and skip the warmup command. Publish cold-start and warm-start results as
+separate numbers.
+
+### Token counting limitations
+
+`qvac-bench` only reports completion tokens and tokens/sec when the endpoint
+includes `usage.completion_tokens` in the streaming response. That count is
+server-reported and may vary by tokenizer, model family, runtime, or compatibility
+layer. If an endpoint omits streaming usage, `completionTokens` and
+`tokensPerSecond` are unavailable.
+
+Tokens/sec is an approximate throughput metric. It divides reported completion
+tokens by total streamed generation time, so it includes request setup, scheduling,
+and final stream shutdown time. It is useful for comparing repeatable local runs on
+the same stack, but it should not be treated as a tokenizer-independent or
+cross-runtime absolute measurement.
 
 To reproduce a result:
 
@@ -153,18 +225,19 @@ To reproduce a result:
 3. Run the benchmark with explicit inputs:
 
    ```bash
-   qvac-bench \
+   node dist/cli.js \
      --url http://localhost:8000/v1/chat/completions \
      --model qvac \
      --prompt-name hello \
      --max-tokens 64 \
+     --timeout-ms 60000 \
      --iterations 5 \
      --output json
    ```
 
 4. Record the command, QVAC server version or commit, model name, prompt or prompt
-   fixture, `--max-tokens`, output format, machine type, and whether the run was
-   cold-start or warm-start.
+   fixture, `--max-tokens`, output format, machine type, hardware notes,
+   quantization, background load, and whether the run was cold-start or warm-start.
 
 Use `--output json` or `--output csv` for machine-readable benchmark results:
 
