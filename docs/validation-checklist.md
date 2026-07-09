@@ -73,6 +73,25 @@ All checks refer to the **real QVAC server stream**, unless explicitly labelled 
 > **Warning**: This section requires a **live QVAC server** and a valid API key.  
 > The CI workflow **never** connects to a real server; these checks must be performed manually by a human.
 
+### 5.0 Selecting the model
+
+Before executing any benchmark command, you must identify a valid model identifier for the QVAC server.
+
+- Determine the model identifier that your QVAC server supports. Typically the server exposes a `GET /models` endpoint returning a list of available model names.
+- You can query the models endpoint:
+  ```bash
+  curl -s -H "Authorization: Bearer $QVAC_API_KEY" https://your-qvac-server.example.com/models | jq .
+  ```
+- Note the model name you intend to benchmark, and use it as the `--model <model>` argument for all subsequent CLI commands.
+- Confirm that the model responds correctly by sending a minimal completion request manually before running the benchmark tool:
+  ```bash
+  curl -s -H "Authorization: Bearer $QVAC_API_KEY" \
+       -H "Content-Type: application/json" \
+       -d '{"model":"<model>","prompt":"Test","max_tokens":1}' \
+       https://your-qvac-server.example.com/v1/completions
+  ```
+  A successful response (HTTP 200) indicates that the model is reachable and ready.
+
 ### 5.1 Environment
 
 - Set the API key:
@@ -91,8 +110,8 @@ All checks refer to the **real QVAC server stream**, unless explicitly labelled 
 
 | Step | Command / Action | Expected Result |
 |------|------------------|-----------------|
-| 5.2.1 | `node dist/cli.js --url https://your-qvac-server.example.com --model <model> --prompt "Hello, world!"` | Output contains `Time to first token` and `Total generation time` (text format by default). No errors. |
-| 5.2.2 | Same command with `--output json` | Output is valid JSON (validate with `jq .`). Keys: `timeToFirstTokenMs`, `totalTimeMs`, `output`, etc. |
+| 5.2.1 | `node dist/cli.js --url https://your-qvac-server.example.com --model <model> --prompt "Hello, world!"` (replace `<model>` with the identifier obtained in §5.0) | Output contains `Time to first token` and `Total generation time` (text format by default). No errors. |
+| 5.2.2 | Same command with `--output json` (still using the model from §5.0) | Output is valid JSON (validate with `jq .`). Keys: `timeToFirstTokenMs`, `totalTimeMs`, `output`, etc. |
 | 5.2.3 | Same command with `--output csv` | Output includes CSV header and one data row. |
 | 5.2.4 | `--iterations 3` | Summary block appears with min/median/max/p95 for each metric. Number of individual results equals 3. |
 | 5.2.5 | Increase `--max-tokens 256` and `/or` change the prompt | No degradation in stream parsing; token count increases. |
