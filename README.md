@@ -11,6 +11,17 @@ pnpm test
 pnpm build
 ```
 
+Verify the package before an alpha release:
+
+```bash
+pnpm verify:package
+```
+
+This runs lint, tests, build, and an `npm pack --dry-run` integrity check. The
+package check verifies the packed files include the CLI entrypoint, README,
+CHANGELOG, and type declarations, and that the package bin points to an existing
+built file.
+
 ## CLI
 
 Run the local CLI after building:
