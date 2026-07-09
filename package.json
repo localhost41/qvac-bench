@@ -2,13 +2,17 @@
   "name": "@localhostlabs/qvac-bench",
   "version": "0.1.0-alpha.0",
   "description": "QVAC developer tooling package: qvac-bench",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "qvac-bench": "dist/cli.js"
   },
-  "files": ["dist", "README.md", "CHANGELOG.md"],
+  "files": ["dist", "docs", "README.md", "CHANGELOG.md", "LICENSE"],
+  "engines": {
+    "node": ">=22 <27"
+  },
   "scripts": {
     "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json",
     "test": "vitest run test",

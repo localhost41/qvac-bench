@@ -19,8 +19,13 @@ pnpm verify:package
 
 This runs lint, tests, build, and an `npm pack --dry-run` integrity check. The
 package check verifies the packed files include the CLI entrypoint, README,
-CHANGELOG, and type declarations, and that the package bin points to an existing
-built file.
+CHANGELOG, LICENSE, type declarations, and shipped docs under `docs/`. It also
+packs the real tarball, installs it into a temporary consumer project, imports
+the public API, runs the installed `qvac-bench --help` bin, and confirms the
+report and validation templates are present after install.
+
+Supported runtime majors are Node.js 22, 24, and 26. CI runs the full package
+verification flow across that matrix.
 
 ## CLI
 
@@ -101,7 +106,9 @@ CI runs a smoke test against a lightweight local mock OpenAI-compatible streamin
 endpoint. This verifies CLI behavior, streaming parsing, time to first token, total
 duration, and approximate tokens/sec without requiring network access or a live
 QVAC server. Real QVAC server validation should be run separately against the
-target QVAC build and model.
+target QVAC build and model, and must be tracked in
+[docs/validation-checklist.md](docs/validation-checklist.md). Until a live run is
+recorded there, real-QVAC validation is unresolved.
 
 ## Methodology
 
