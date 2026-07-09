@@ -59,6 +59,28 @@ function benchmarkDependenciesForOutput(output: string) {
   };
 }
 
+function benchmarkDependenciesForRepeatedOutputs(outputs: string[]) {
+  let requestCount = 0;
+  const fetchMock: typeof fetch = async () => {
+    const output = outputs[requestCount] ?? "";
+    requestCount += 1;
+    return new Response(
+      streamFrom([
+        `data: {"choices":[{"delta":{"content":${JSON.stringify(output)}}}]}\n\n`,
+        'data: {"choices":[],"usage":{"completion_tokens":4}}\n\n',
+        "data: [DONE]\n\n"
+      ]),
+      { status: 200, statusText: "OK" }
+    );
+  };
+  const times = [0, 100, 200, 200, 250, 300, 300, 450, 600];
+
+  return {
+    fetch: fetchMock,
+    now: () => times.shift() ?? 600
+  };
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -152,6 +174,7 @@ describe("qvac-bench", () => {
     expect(helpText).toContain("--help");
     expect(helpText).toContain("--output");
     expect(helpText).toContain("--prompt-name <name>");
+    expect(helpText).toContain("--iterations <count>");
     expect(helpText).toContain("hello, summary, reasoning");
   });
 
@@ -176,6 +199,14 @@ describe("qvac-bench", () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("--output must be one of: text, json, csv");
+    expect(result.stderr).toContain("Usage: qvac-bench [options]");
+  });
+
+  it("reports invalid iteration counts", async () => {
+    const result = await runCli(["--iterations", "0"]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("--iterations must be a positive integer");
     expect(result.stderr).toContain("Usage: qvac-bench [options]");
   });
 
@@ -234,6 +265,100 @@ describe("qvac-bench", () => {
       completionTokens: 4,
       tokensPerSecond: 8,
       output: "Hello"
+    });
+  });
+
+  it("keeps single-iteration JSON output backward-compatible when iterations is explicit", async () => {
+    const result = await runCli(["--iterations", "1", "--output", "json"], {}, benchmarkDependenciesForOutput("Hello"));
+
+    expect(result).toMatchObject({
+      stderr: "",
+      exitCode: 0
+    });
+    expect(JSON.parse(result.stdout)).toEqual({
+      timeToFirstTokenMs: 125,
+      totalTimeMs: 500,
+      completionTokens: 4,
+      tokensPerSecond: 8,
+      output: "Hello"
+    });
+  });
+
+  it("outputs summary statistics for repeated JSON runs", async () => {
+    const result = await runCli(
+      ["--iterations", "3", "--output", "json"],
+      {},
+      benchmarkDependenciesForRepeatedOutputs(["one", "two", "three"])
+    );
+    const output = JSON.parse(result.stdout) as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      stderr: "",
+      exitCode: 0
+    });
+    expect(output).toMatchObject({
+      iterations: 3,
+      summary: {
+        timeToFirstTokenMs: {
+          min: 50,
+          median: 100,
+          max: 150,
+          p95: 150
+        },
+        totalTimeMs: {
+          min: 100,
+          median: 200,
+          max: 300,
+          p95: 300
+        },
+        tokensPerSecond: {
+          min: 13.333333333333334,
+          median: 20,
+          max: 40,
+          p95: 40
+        }
+      }
+    });
+    expect(output.results).toEqual([
+      {
+        timeToFirstTokenMs: 100,
+        totalTimeMs: 200,
+        completionTokens: 4,
+        tokensPerSecond: 20,
+        output: "one"
+      },
+      {
+        timeToFirstTokenMs: 50,
+        totalTimeMs: 100,
+        completionTokens: 4,
+        tokensPerSecond: 40,
+        output: "two"
+      },
+      {
+        timeToFirstTokenMs: 150,
+        totalTimeMs: 300,
+        completionTokens: 4,
+        tokensPerSecond: 13.333333333333334,
+        output: "three"
+      }
+    ]);
+  });
+
+  it("outputs summary statistics for repeated text runs", async () => {
+    const result = await runCli(
+      ["--iterations", "3"],
+      {},
+      benchmarkDependenciesForRepeatedOutputs(["one", "two", "three"])
+    );
+
+    expect(result).toEqual({
+      stdout:
+        "Iterations: 3\n" +
+        "Time to first token summary: min 50.0 ms, median 100.0 ms, max 150.0 ms, p95 150.0 ms\n" +
+        "Total generation time summary: min 100.0 ms, median 200.0 ms, max 300.0 ms, p95 300.0 ms\n" +
+        "Approx tokens/sec summary: min 13.33, median 20.00, max 40.00, p95 40.00\n",
+      stderr: "",
+      exitCode: 0
     });
   });
 
@@ -303,6 +428,24 @@ describe("qvac-bench", () => {
       exitCode: 0
     });
     expect(result.stdout.trimEnd().split("\n")).toEqual([csvHeaderGolden, "125,500,,,Hello"]);
+  });
+
+  it("outputs summary statistics for repeated CSV runs", async () => {
+    const result = await runCli(
+      ["--iterations", "3", "--output", "csv"],
+      {},
+      benchmarkDependenciesForRepeatedOutputs(["one", "two", "three"])
+    );
+
+    expect(result).toEqual({
+      stdout:
+        "metric,min,median,max,p95\n" +
+        "timeToFirstTokenMs,50,100,150,150\n" +
+        "totalTimeMs,100,200,300,300\n" +
+        "tokensPerSecond,13.333333333333334,20,40,40\n",
+      stderr: "",
+      exitCode: 0
+    });
   });
 
   it("smoke tests the CLI against a local mock streaming endpoint", async () => {
@@ -392,6 +535,7 @@ describe("qvac-bench", () => {
         model: "qvac-local",
         prompt: "hello",
         maxTokens: 8,
+        iterations: 1,
         outputFormat: "text",
         apiKey: "test-key"
       },

@@ -33,7 +33,8 @@ qvac-bench \
   --url http://localhost:8000/v1/chat/completions \
   --model qvac \
   --prompt "Say hello in one short sentence." \
-  --max-tokens 64
+  --max-tokens 64 \
+  --iterations 5
 ```
 
 Run a built-in prompt fixture by name:
@@ -54,8 +55,11 @@ Available prompt fixtures:
 
 The CLI prints time to first token, total generation time, completion tokens when the
 server includes streaming usage, and approximate tokens/sec when completion tokens
-are available. If the QVAC server is not running or the endpoint is unreachable, the
-CLI exits non-zero with a clear unavailable-server message.
+are available. With `--iterations` greater than `1`, it repeats the same request and
+prints min, median, max, and p95 summaries for time to first token and total
+generation time. Tokens/sec summaries are included when the endpoint reports
+completion token counts. If the QVAC server is not running or the endpoint is
+unreachable, the CLI exits non-zero with a clear unavailable-server message.
 
 ## CI validation
 
@@ -67,9 +71,9 @@ target QVAC build and model.
 
 ## Methodology
 
-`qvac-bench` sends one OpenAI-compatible streaming chat completion request to the
-configured endpoint. The request includes the selected model, prompt, `max_tokens`,
-`stream: true`, and `stream_options: { include_usage: true }`.
+`qvac-bench` sends one or more OpenAI-compatible streaming chat completion requests
+to the configured endpoint. Each request includes the selected model, prompt,
+`max_tokens`, `stream: true`, and `stream_options: { include_usage: true }`.
 
 The benchmark reports:
 
@@ -81,6 +85,20 @@ The benchmark reports:
   server includes streaming usage.
 - Approx tokens/sec: completion tokens divided by total generation time, when
   completion tokens are available.
+
+When `--iterations` is greater than `1`, the summary reports:
+
+- Min: fastest observed value.
+- Median: middle value after sorting, or the average of the two middle values for
+  an even number of runs.
+- Max: slowest observed value.
+- p95: nearest-rank 95th percentile after sorting.
+
+Use repeated runs to compare warm performance across the same endpoint, model,
+prompt, and `--max-tokens` value. Time to first token is most useful for perceived
+responsiveness. Total generation time captures end-to-end streamed completion
+duration. Tokens/sec is approximate because it depends on server-reported completion
+token counts and uses total generation time as the denominator.
 
 Cold starts and warm starts can produce very different numbers. The first request
 after starting a local QVAC server may include model loading, cache setup, or other
@@ -106,6 +124,7 @@ To reproduce a result:
      --model qvac \
      --prompt-name hello \
      --max-tokens 64 \
+     --iterations 5 \
      --output json
    ```
 
@@ -127,7 +146,7 @@ downstream tools. Patch and alpha releases may add fields, but existing field
 names, data types, and CSV column ordering should not change without a clear
 release note.
 
-JSON output is a single object with this shape:
+For one iteration, JSON output is a single object with this shape:
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -145,6 +164,17 @@ timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output
 
 When optional numeric values are unavailable, their CSV cells are empty. CSV
 values are escaped with double quotes when needed.
+
+For repeated runs, JSON output includes `iterations`, `results`, and `summary`.
+The `results` array contains one single-run result object per iteration, and
+`summary` contains `timeToFirstTokenMs`, `totalTimeMs`, and, when available,
+`tokensPerSecond` summary objects with `min`, `median`, `max`, and `p95`.
+
+For repeated CSV runs, output is summary-oriented with this header:
+
+```text
+metric,min,median,max,p95
+```
 
 If your local endpoint requires a bearer token, pass `--api-key` or set
 `QVAC_API_KEY` or `OPENAI_API_KEY`.
