@@ -8,7 +8,9 @@
 - Benchmark command:
 - Prompt or prompt fixture:
 - Max tokens:
+- Iterations:
 - Run type: cold start / warm start
+- Warmup command:
 
 ## System
 
@@ -17,7 +19,10 @@
 - CPU:
 - GPU or accelerator:
 - RAM:
+- Power mode:
+- Thermal notes:
 - Memory notes:
+- Background load:
 
 ## Model
 
@@ -25,6 +30,8 @@
 - Quantization:
 - Context length:
 - Runtime or server:
+- QVAC version or commit:
+- Runtime flags:
 
 ## Results
 
@@ -37,7 +44,9 @@
 
 ## Limitations
 
-- 
+- Approximate token counting notes:
+- Known differences from production setup:
+- Outliers or discarded runs:
 
 ## Reproduction Notes
 
