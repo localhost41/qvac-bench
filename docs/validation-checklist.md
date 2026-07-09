@@ -118,6 +118,42 @@ Before executing any benchmark command, you must identify a valid model identifi
 | 5.2.6 | Omit `--url` (uses default) | QVAC server falls back to the built‑in default. If default is unreachable, a clear error is shown. |
 | 5.2.7 | Use an unreachable URL (`--url http://localhost:1999`) | Error message includes `server_unavailable`; exit code is non‑zero. |
 
+#### Example expected outputs
+
+The exact timings and token counts will vary with each run, but the **structure** of each output must match the following examples.
+
+- **Text format (default)** – single run:
+  ```
+  Time to first token: 123.1 ms
+  Total generation time: 1500.2 ms
+  Completion tokens: 14
+  Approx tokens/sec: 9.33
+  ```
+
+- **JSON format** – single run:
+  ```json
+  {
+    "timeToFirstTokenMs": 123.1,
+    "totalTimeMs": 1500.2,
+    "completionTokens": 14,
+    "tokensPerSecond": 9.33,
+    "output": "Hello, world!"
+  }
+  ```
+
+- **CSV format** – single run:
+  ```
+  timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output
+  123.1,1500.2,14,9.33,"Hello, world!"
+  ```
+
+- **Text format** – repeated run (`--iterations 3`):
+  ```
+  Iterations: 3
+  Time to first token summary: min 120.3 ms, median 125.0 ms, max 132.1 ms, p95 131.0 ms
+  Total generation time summary: min 1450.0 ms, median 1500.0 ms, max 1550.0 ms, p95 1540.0 ms
+  ```
+
 ### 5.3 Error handling triage
 
 | Failure symptom | Likely cause | Action |
@@ -175,5 +211,6 @@ At least **two distinct environments** must be exercised, one resembling a devel
 - Clarified separation between mock‑CI and real‑QVAC validation.
 - Included macOS/local run and fresh‑install Linux matrix.
 - Marked unresolved cross‑platform and proxy checks for future inspections.
+- Added example outputs for text, JSON, CSV, and repeated runs to help reviewers verify the tool’s output format.
 
 *Draft generated for human/GPT review – not to be merged without approval.*
