@@ -16,6 +16,7 @@ Options:
   --prompt <prompt>       Prompt to send. Default: Say hello in one short sentence.
   --prompt-name <name>    Built-in prompt fixture to run: ${promptNames().join(", ")}
   --max-tokens <tokens>   Maximum tokens to generate. Default: 64
+  --iterations <count>    Number of repeated runs. Default: 1
   --output <format>       Output format: text, json, or csv. Default: text
   --api-key <key>         Optional bearer token. Defaults to QVAC_API_KEY or OPENAI_API_KEY
 `;
@@ -33,6 +34,7 @@ export interface BenchmarkOptions {
   model: string;
   prompt: string;
   maxTokens: number;
+  iterations?: number;
   outputFormat: OutputFormat;
   apiKey?: string;
 }
@@ -45,6 +47,26 @@ export interface BenchmarkResult {
   output: string;
 }
 
+export interface MetricSummary {
+  min: number;
+  median: number;
+  max: number;
+  p95: number;
+}
+
+export interface BenchmarkSummary {
+  iterations: number;
+  timeToFirstTokenMs: MetricSummary;
+  totalTimeMs: MetricSummary;
+  tokensPerSecond?: MetricSummary;
+}
+
+export interface RepeatedBenchmarkResult {
+  iterations: number;
+  results: BenchmarkResult[];
+  summary: BenchmarkSummary;
+}
+
 export interface BenchmarkDependencies {
   fetch: typeof fetch;
   now: () => number;
@@ -55,6 +77,7 @@ const defaultOptions: BenchmarkOptions = {
   model: "qvac",
   prompt: "Say hello in one short sentence.",
   maxTokens: 64,
+  iterations: 1,
   outputFormat: "text"
 };
 
@@ -111,6 +134,16 @@ function parseArgs(args: string[], env: NodeJS.ProcessEnv): BenchmarkOptions {
           throw new Error("--max-tokens must be a positive integer");
         }
         options.maxTokens = maxTokens;
+        index += 1;
+        break;
+      }
+      case "--iterations": {
+        const rawValue = readValue(args, index, arg);
+        const iterations = Number.parseInt(rawValue, 10);
+        if (!Number.isFinite(iterations) || iterations < 1) {
+          throw new Error("--iterations must be a positive integer");
+        }
+        options.iterations = iterations;
         index += 1;
         break;
       }
@@ -176,6 +209,47 @@ function formatMilliseconds(value: number): string {
   return `${value.toFixed(1)} ms`;
 }
 
+function summarizeNumbers(values: number[]): MetricSummary {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+  const p95Index = Math.ceil(sorted.length * 0.95) - 1;
+
+  return {
+    min: sorted[0],
+    median,
+    max: sorted[sorted.length - 1],
+    p95: sorted[Math.max(0, Math.min(sorted.length - 1, p95Index))]
+  };
+}
+
+function summarizeBenchmarkResults(results: BenchmarkResult[]): BenchmarkSummary {
+  const tokensPerSecondValues = results
+    .map((result) => result.tokensPerSecond)
+    .filter((value): value is number => typeof value === "number");
+  const summary: BenchmarkSummary = {
+    iterations: results.length,
+    timeToFirstTokenMs: summarizeNumbers(results.map((result) => result.timeToFirstTokenMs)),
+    totalTimeMs: summarizeNumbers(results.map((result) => result.totalTimeMs))
+  };
+
+  if (tokensPerSecondValues.length > 0) {
+    summary.tokensPerSecond = summarizeNumbers(tokensPerSecondValues);
+  }
+
+  return summary;
+}
+
+function formatMetricSummary(summary: MetricSummary, formatter: (value: number) => string): string {
+  return [
+    `min ${formatter(summary.min)}`,
+    `median ${formatter(summary.median)}`,
+    `max ${formatter(summary.max)}`,
+    `p95 ${formatter(summary.p95)}`
+  ].join(", ");
+}
+
 function formatBenchmark(result: BenchmarkResult): string {
   const lines = [
     `Time to first token: ${formatMilliseconds(result.timeToFirstTokenMs)}`,
@@ -195,7 +269,31 @@ function formatBenchmark(result: BenchmarkResult): string {
   return `${lines.join("\n")}\n`;
 }
 
+function formatRepeatedBenchmark(result: RepeatedBenchmarkResult): string {
+  const lines = [
+    `Iterations: ${result.iterations}`,
+    `Time to first token summary: ${formatMetricSummary(result.summary.timeToFirstTokenMs, formatMilliseconds)}`,
+    `Total generation time summary: ${formatMetricSummary(result.summary.totalTimeMs, formatMilliseconds)}`
+  ];
+
+  if (result.summary.tokensPerSecond) {
+    lines.push(
+      `Approx tokens/sec summary: ${formatMetricSummary(result.summary.tokensPerSecond, (value) =>
+        value.toFixed(2)
+      )}`
+    );
+  } else {
+    lines.push("Approx tokens/sec summary: unavailable");
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 function formatJsonBenchmark(result: BenchmarkResult): string {
+  return `${JSON.stringify(result, null, 2)}\n`;
+}
+
+function formatJsonRepeatedBenchmark(result: RepeatedBenchmarkResult): string {
   return `${JSON.stringify(result, null, 2)}\n`;
 }
 
@@ -223,6 +321,29 @@ function formatCsvBenchmark(result: BenchmarkResult): string {
   return `${columns.join(",")}\n${values.join(",")}\n`;
 }
 
+function formatCsvRepeatedBenchmark(result: RepeatedBenchmarkResult): string {
+  const columns = ["metric", "min", "median", "max", "p95"];
+  const rows: Array<[string, MetricSummary]> = [
+    ["timeToFirstTokenMs", result.summary.timeToFirstTokenMs],
+    ["totalTimeMs", result.summary.totalTimeMs]
+  ];
+  if (result.summary.tokensPerSecond) {
+    rows.push(["tokensPerSecond", result.summary.tokensPerSecond]);
+  }
+
+  return `${columns.join(",")}\n${rows
+    .map(([metric, summary]) =>
+      [
+        formatCsvValue(metric),
+        formatCsvValue(summary.min),
+        formatCsvValue(summary.median),
+        formatCsvValue(summary.max),
+        formatCsvValue(summary.p95)
+      ].join(",")
+    )
+    .join("\n")}\n`;
+}
+
 function formatBenchmarkOutput(result: BenchmarkResult, outputFormat: OutputFormat): string {
   switch (outputFormat) {
     case "json":
@@ -231,6 +352,17 @@ function formatBenchmarkOutput(result: BenchmarkResult, outputFormat: OutputForm
       return formatCsvBenchmark(result);
     case "text":
       return formatBenchmark(result);
+  }
+}
+
+function formatRepeatedBenchmarkOutput(result: RepeatedBenchmarkResult, outputFormat: OutputFormat): string {
+  switch (outputFormat) {
+    case "json":
+      return formatJsonRepeatedBenchmark(result);
+    case "csv":
+      return formatCsvRepeatedBenchmark(result);
+    case "text":
+      return formatRepeatedBenchmark(result);
   }
 }
 
@@ -333,6 +465,23 @@ export async function measureQvacLatency(
   };
 }
 
+export async function measureRepeatedQvacLatency(
+  options: BenchmarkOptions,
+  dependencies: BenchmarkDependencies = { fetch: globalThis.fetch, now: () => performance.now() }
+): Promise<RepeatedBenchmarkResult> {
+  const results: BenchmarkResult[] = [];
+  const iterations = options.iterations ?? 1;
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    results.push(await measureQvacLatency(options, dependencies));
+  }
+
+  return {
+    iterations,
+    results,
+    summary: summarizeBenchmarkResults(results)
+  };
+}
+
 export async function runCli(
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -359,9 +508,18 @@ export async function runCli(
   }
 
   try {
-    const result = await measureQvacLatency(options, dependencies);
+    if (options.iterations === 1) {
+      const result = await measureQvacLatency(options, dependencies);
+      return {
+        stdout: formatBenchmarkOutput(result, options.outputFormat),
+        stderr: "",
+        exitCode: 0
+      };
+    }
+
+    const result = await measureRepeatedQvacLatency(options, dependencies);
     return {
-      stdout: formatBenchmarkOutput(result, options.outputFormat),
+      stdout: formatRepeatedBenchmarkOutput(result, options.outputFormat),
       stderr: "",
       exitCode: 0
     };
