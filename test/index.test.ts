@@ -5,6 +5,30 @@ import { helpText, measureQvacLatency, runCli } from "../src/cli.js";
 import { name } from "../src/index.js";
 import { findPromptFixture, promptFixtures, promptNames } from "../src/prompts.js";
 
+const jsonResultRequiredKeys = ["timeToFirstTokenMs", "totalTimeMs", "output"] as const;
+const jsonResultOptionalKeys = ["completionTokens", "tokensPerSecond"] as const;
+const jsonResultAllowedKeys: string[] = [...jsonResultRequiredKeys, ...jsonResultOptionalKeys].sort();
+const csvHeaderGolden = "timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output";
+
+function expectJsonBenchmarkResultShape(value: unknown): asserts value is Record<string, unknown> {
+  expect(value).toEqual(expect.any(Object));
+
+  const result = value as Record<string, unknown>;
+  expect(Object.keys(result).sort().every((key) => jsonResultAllowedKeys.includes(key))).toBe(true);
+  for (const key of jsonResultRequiredKeys) {
+    expect(result).toHaveProperty(key);
+  }
+  expect(result.timeToFirstTokenMs).toEqual(expect.any(Number));
+  expect(result.totalTimeMs).toEqual(expect.any(Number));
+  if ("completionTokens" in result) {
+    expect(result.completionTokens).toEqual(expect.any(Number));
+  }
+  if ("tokensPerSecond" in result) {
+    expect(result.tokensPerSecond).toEqual(expect.any(Number));
+  }
+  expect(result.output).toEqual(expect.any(String));
+}
+
 function streamFrom(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
@@ -200,7 +224,11 @@ describe("qvac-bench", () => {
       stderr: "",
       exitCode: 0
     });
-    expect(JSON.parse(result.stdout)).toEqual({
+    const output = JSON.parse(result.stdout) as unknown;
+
+    expectJsonBenchmarkResultShape(output);
+    expect(Object.keys(output).sort()).toEqual(jsonResultAllowedKeys);
+    expect(output).toEqual({
       timeToFirstTokenMs: 125,
       totalTimeMs: 500,
       completionTokens: 4,
@@ -209,15 +237,72 @@ describe("qvac-bench", () => {
     });
   });
 
+  it("omits optional JSON usage fields when completion tokens are unavailable", async () => {
+    const fetchMock: typeof fetch = async () =>
+      new Response(streamFrom(['data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n', "data: [DONE]\n\n"]), {
+        status: 200,
+        statusText: "OK"
+      });
+    const times = [0, 125, 500];
+
+    const result = await runCli(
+      ["--output", "json"],
+      {},
+      {
+        fetch: fetchMock,
+        now: () => times.shift() ?? 500
+      }
+    );
+    const output = JSON.parse(result.stdout) as unknown;
+
+    expect(result).toMatchObject({
+      stderr: "",
+      exitCode: 0
+    });
+    expectJsonBenchmarkResultShape(output);
+    expect(output).toEqual({
+      timeToFirstTokenMs: 125,
+      totalTimeMs: 500,
+      output: "Hello"
+    });
+  });
+
   it("outputs benchmark results as CSV", async () => {
     const result = await runCli(["--output", "csv"], {}, benchmarkDependenciesForOutput('Hello, "qvac"'));
 
+    const rows = result.stdout.trimEnd().split("\n");
     expect(result).toEqual({
       stdout:
         'timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output\n125,500,4,8,"Hello, ""qvac"""\n',
       stderr: "",
       exitCode: 0
     });
+    expect(rows).toEqual([csvHeaderGolden, '125,500,4,8,"Hello, ""qvac"""']);
+  });
+
+  it("keeps CSV headers and row ordering stable when usage is unavailable", async () => {
+    const fetchMock: typeof fetch = async () =>
+      new Response(streamFrom(['data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n', "data: [DONE]\n\n"]), {
+        status: 200,
+        statusText: "OK"
+      });
+    const times = [0, 125, 500];
+
+    const result = await runCli(
+      ["--output", "csv"],
+      {},
+      {
+        fetch: fetchMock,
+        now: () => times.shift() ?? 500
+      }
+    );
+
+    expect(result).toEqual({
+      stdout: `${csvHeaderGolden}\n125,500,,,Hello\n`,
+      stderr: "",
+      exitCode: 0
+    });
+    expect(result.stdout.trimEnd().split("\n")).toEqual([csvHeaderGolden, "125,500,,,Hello"]);
   });
 
   it("smoke tests the CLI against a local mock streaming endpoint", async () => {

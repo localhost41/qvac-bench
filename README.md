@@ -120,5 +120,31 @@ qvac-bench --output json
 qvac-bench --output csv
 ```
 
+## Output compatibility
+
+`qvac-bench` treats JSON and CSV output fields as a compatibility surface for
+downstream tools. Patch and alpha releases may add fields, but existing field
+names, data types, and CSV column ordering should not change without a clear
+release note.
+
+JSON output is a single object with this shape:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `timeToFirstTokenMs` | number | Yes | Milliseconds from request start until the first non-empty streamed token delta. |
+| `totalTimeMs` | number | Yes | Milliseconds from request start until the stream finishes. |
+| `completionTokens` | number | No | Server-reported `usage.completion_tokens`, when included by the endpoint. |
+| `tokensPerSecond` | number | No | `completionTokens` divided by total generation seconds, when completion tokens are available. |
+| `output` | string | Yes | Concatenated streamed text output. Empty output is represented as an empty string. |
+
+CSV output uses one header row and one result row. The current column order is:
+
+```text
+timeToFirstTokenMs,totalTimeMs,completionTokens,tokensPerSecond,output
+```
+
+When optional numeric values are unavailable, their CSV cells are empty. CSV
+values are escaped with double quotes when needed.
+
 If your local endpoint requires a bearer token, pass `--api-key` or set
 `QVAC_API_KEY` or `OPENAI_API_KEY`.
