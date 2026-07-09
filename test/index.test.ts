@@ -1,3 +1,5 @@
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { helpText, measureQvacLatency, runCli } from "../src/cli.js";
 import { name } from "../src/index.js";
@@ -30,6 +32,79 @@ function benchmarkDependenciesForOutput(output: string) {
   return {
     fetch: fetchMock,
     now: () => times.shift() ?? 500
+  };
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function isListenUnavailable(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "EPERM";
+}
+
+async function startMockStreamingServer(): Promise<{
+  close: () => Promise<void>;
+  requests: unknown[];
+  url: string;
+}> {
+  const requests: unknown[] = [];
+  const server: Server = createServer((request, response) => {
+    if (request.method !== "POST" || request.url !== "/v1/chat/completions") {
+      response.writeHead(404).end();
+      return;
+    }
+
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      requests.push(JSON.parse(body));
+
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive"
+      });
+
+      void (async () => {
+        await delay(10);
+        response.write('data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n');
+        await delay(10);
+        response.write('data: {"choices":[{"delta":{"content":"lo"}}]}\n\n');
+        response.write('data: {"choices":[],"usage":{"completion_tokens":3}}\n\n');
+        response.end("data: [DONE]\n\n");
+      })();
+    });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address() as AddressInfo;
+
+  return {
+    close: () =>
+      new Promise((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+    requests,
+    url: `http://127.0.0.1:${address.port}/v1/chat/completions`
   };
 }
 
@@ -143,6 +218,60 @@ describe("qvac-bench", () => {
       stderr: "",
       exitCode: 0
     });
+  });
+
+  it("smoke tests the CLI against a local mock streaming endpoint", async () => {
+    let mockServer: Awaited<ReturnType<typeof startMockStreamingServer>>;
+    try {
+      mockServer = await startMockStreamingServer();
+    } catch (error) {
+      if (!process.env.CI && isListenUnavailable(error)) {
+        return;
+      }
+      throw error;
+    }
+
+    try {
+      const result = await runCli([
+        "--url",
+        mockServer.url,
+        "--model",
+        "qvac-mock",
+        "--prompt",
+        "hello",
+        "--max-tokens",
+        "8",
+        "--output",
+        "json"
+      ]);
+
+      expect(result).toMatchObject({
+        stderr: "",
+        exitCode: 0
+      });
+      expect(mockServer.requests).toEqual([
+        {
+          model: "qvac-mock",
+          messages: [{ role: "user", content: "hello" }],
+          max_tokens: 8,
+          stream: true,
+          stream_options: { include_usage: true }
+        }
+      ]);
+
+      const output = JSON.parse(result.stdout) as Record<string, unknown>;
+      expect(output.output).toBe("Hello");
+      expect(output.completionTokens).toBe(3);
+      expect(output.timeToFirstTokenMs).toEqual(expect.any(Number));
+      expect(output.totalTimeMs).toEqual(expect.any(Number));
+      expect(output.tokensPerSecond).toEqual(expect.any(Number));
+      expect(output.timeToFirstTokenMs as number).toBeGreaterThanOrEqual(0);
+      expect(output.totalTimeMs as number).toBeGreaterThanOrEqual(output.timeToFirstTokenMs as number);
+      expect(output.tokensPerSecond as number).toBeGreaterThan(0);
+      expect(Number.isFinite(output.tokensPerSecond as number)).toBe(true);
+    } finally {
+      await mockServer.close();
+    }
   });
 
   it("measures first token time, total time, and tokens per second from a streaming response", async () => {
