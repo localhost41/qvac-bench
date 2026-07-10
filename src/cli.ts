@@ -423,6 +423,7 @@ function safeEndpointLabel(url: string): string {
 
 function sanitizeErrorMessage(message: string): string {
   return message
+    .replace(/(https?:\/\/)([^/@\s]+)@/gi, "$1<redacted>@")
     .replace(/authorization:\s*bearer\s+[^\s,;]+/gi, "authorization: Bearer <redacted>")
     .replace(/bearer\s+[^\s,;]+/gi, "Bearer <redacted>")
     .replace(/(api[-_]?key|authorization|auth|password|secret|token)=([^&\s]+)/gi, "$1=<redacted>");
