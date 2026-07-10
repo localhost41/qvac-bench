@@ -1,4 +1,4 @@
-You are building public QVAC developer tools for LocalHost Labs.
+You are building public QVAC developer tools for localhost41.
 
 Work only on the current GitHub issue.
 
