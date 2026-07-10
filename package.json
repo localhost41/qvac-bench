@@ -3,6 +3,14 @@
   "version": "0.1.0-alpha.0",
   "description": "QVAC developer tooling package: qvac-bench",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/localhost41/qvac-bench.git"
+  },
+  "bugs": {
+    "url": "https://github.com/localhost41/qvac-bench/issues"
+  },
+  "homepage": "https://github.com/localhost41/qvac-bench#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,6 +18,9 @@
     "qvac-bench": "dist/cli.js"
   },
   "files": ["dist", "docs", "README.md", "CHANGELOG.md", "LICENSE"],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22 <27"
   },

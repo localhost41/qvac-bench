@@ -16,18 +16,18 @@ all automated tests use in‑memory mock servers.
 
 Current package version: `0.1.0-alpha.0`
 
-As of 2026-07-09:
+As of 2026-07-10:
 
 - Automated mock validation: covered by `pnpm verify:package` and CI on Node.js
   22, 24, and 26. Record the exact CI run before release.
 - Packed package installability: covered by `pnpm verify:package`, which packs
   the tarball, installs it into a temporary consumer project, imports the public
   API, runs the installed CLI help command, and checks shipped docs.
-- Real-QVAC validation: **[UNRESOLVED]**. No passing live-QVAC run is claimed by
-  this repository until the matrix in [Real QVAC Validation](#2-real-qvac-validation)
-  includes dated pass entries with endpoint, model, command, and notes.
-- Public benchmark claims: **blocked** until real-QVAC validation is completed
-  and a benchmark report is filled from `docs/reports/template.md`.
+- Real-QVAC alpha smoke validation: passed on macOS with the shared QVAC factory
+  production E2E gate and local model alias `qvac-local`.
+- Public benchmark claims: **blocked** until a benchmark report is filled from
+  `docs/reports/template.md` with hardware, model, endpoint, prompt, cold/warm
+  run notes, and exact command output.
 
 ---
 
@@ -85,7 +85,8 @@ pipeline that does not have access to the real endpoint.
 
 | Environment                     | QVAC URL               | Model          | Command (example)                                                                                                                                                    | Expected Output                                                                          | Pass? | Date       | Notes |
 | ------------------------------- | ----------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | :---: | ---------- | ----- |
-| macOS 14 (Apple Silicon) – local | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Time‑to‑first‑token and total‑time stats printed; exit code 0.                           |  ☐   |            | Run after a clean build. **[UNRESOLVED]** |
+| macOS 15/26 (Apple Silicon) – local | `http://127.0.0.1:11434/v1/chat/completions` | `qvac-local` | `scripts/qvac-production-e2e.sh --source npm --keep-tmp` from `/Users/samaroomini/qvac-factory` | JSON metrics emitted with `timeToFirstTokenMs`, `totalTimeMs`, `completionTokens`, `tokensPerSecond`, and `output`; exit code 0. |  ☑   | 2026-07-10 | Published package validation. Logs: `/tmp/qvac-production-e2e-MUtM0W/bench-live.json`. |
+| macOS 15/26 (Apple Silicon) – local | `http://127.0.0.1:11434/v1/chat/completions` | `qvac-local` | `scripts/qvac-production-e2e.sh --source local --keep-tmp` from `/Users/samaroomini/qvac-factory` | JSON metrics emitted with `timeToFirstTokenMs`, `totalTimeMs`, `completionTokens`, `tokensPerSecond`, and `output`; exit code 0. |  ☑   | 2026-07-10 | Local packed-artifact validation. Logs: `/tmp/qvac-production-e2e-rWHFvN/bench-live.json`. |
 | Linux (fresh install)           | `<real‑qvac‑url>`       | `gpt-4o-mini`  | `node dist/cli.js --url $QVAC_URL --model gpt-4o-mini --prompt "Hello" --max-tokens 50 --iterations 3`                                                               | Same as above; no errors.                                                                 |  ☐   |            | Node.js 22, 24, or 26 from a clean image. **[UNRESOLVED]** |
 
 ### 2.3 Steps for Each Row

@@ -1,0 +1,38 @@
+name: Publish Alpha
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref or tag to publish
+        required: true
+        default: main
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify alpha package
+        run: |
+          node -e "const p=require('./package.json'); if (!/-alpha\\./.test(p.version)) throw new Error('Refusing to publish non-alpha version ' + p.version);"
+          pnpm verify:package
+      - name: Publish alpha
+        run: npm publish --access public --tag alpha --provenance
