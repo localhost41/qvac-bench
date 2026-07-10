@@ -4,6 +4,15 @@
 
 - No unreleased changes.
 
+## 0.1.0-alpha.1 - 2026-07-10
+
+- Add public scoped-package publish metadata and package repository links.
+- Add a manual alpha publish workflow with npm provenance and an alpha-version
+  guard.
+- Record the first shared factory live-QVAC alpha smoke validation in the
+  validation checklist while keeping public benchmark claims blocked until a
+  full benchmark report is completed.
+
 ## 0.1.0-alpha.0 - 2026-07-09
 
 - Initial alpha CLI for OpenAI-compatible streaming QVAC benchmarks.
