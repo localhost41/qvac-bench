@@ -603,6 +603,30 @@ describe("qvac-bench", () => {
     expect(result.stderr).not.toContain("url-secret");
   });
 
+  it("redacts URL userinfo from underlying fetch errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error(
+          "Request cannot be constructed from a URL that includes credentials: http://user:pass@127.0.0.1:8000/v1/chat/completions?api_key=url-secret"
+        );
+      })
+    );
+
+    const result = await runCli([
+      "--url",
+      "http://user:pass@127.0.0.1:8000/v1/chat/completions?api_key=url-secret",
+      "--api-key",
+      "secret-token"
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("http://<redacted>@127.0.0.1:8000/v1/chat/completions?api_key=<redacted>");
+    expect(result.stderr).not.toContain("user:pass");
+    expect(result.stderr).not.toContain("url-secret");
+    expect(result.stderr).not.toContain("secret-token");
+  });
+
   it("reports non-2xx endpoint responses distinctly", async () => {
     const result = await runCli(
       ["--url", "http://localhost:8000/v1/chat/completions", "--api-key", "secret-token"],
