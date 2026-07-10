@@ -14,7 +14,7 @@ all automated tests use in‑memory mock servers.
 
 ## Release Readiness Status
 
-Current package version: `0.1.0-alpha.0`
+Current package version: `0.1.0-alpha.1`
 
 As of 2026-07-10:
 
