@@ -1,6 +1,6 @@
 # qvac-bench
 
-Public QVAC developer tooling from LocalHost Labs.
+Public QVAC developer tooling from localhost41.
 
 ## Local development
 
