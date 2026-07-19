@@ -554,7 +554,7 @@ describe("qvac-bench", () => {
 
     const result = await measureQvacLatency(
       {
-        url: "http://localhost:8000/v1/chat/completions",
+        url: "http://127.0.0.1:11434/v1/chat/completions",
         model: "qvac-local",
         prompt: "hello",
         maxTokens: 8,

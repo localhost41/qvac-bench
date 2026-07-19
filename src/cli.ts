@@ -11,7 +11,7 @@ QVAC benchmark developer CLI.
 Options:
   -h, --help              Show this help text
   --url <url>             QVAC OpenAI-compatible chat completions URL
-                          Default: http://localhost:8000/v1/chat/completions
+                          Default: http://127.0.0.1:11434/v1/chat/completions
   --model <model>         Model name to request. Default: qvac
   --prompt <prompt>       Prompt to send. Default: Say hello in one short sentence.
   --prompt-name <name>    Built-in prompt fixture to run: ${promptNames().join(", ")}
@@ -75,7 +75,7 @@ export interface BenchmarkDependencies {
 }
 
 const defaultOptions: BenchmarkOptions = {
-  url: "http://localhost:8000/v1/chat/completions",
+  url: "http://127.0.0.1:11434/v1/chat/completions",
   model: "qvac",
   prompt: "Say hello in one short sentence.",
   maxTokens: 64,
