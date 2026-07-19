@@ -1,6 +1,9 @@
 # qvac-bench
 
-Public QVAC developer tooling from localhost41.
+Command-line benchmarks for local QVAC OpenAI-compatible streaming endpoints.
+
+> Independent community project maintained by localhost41. Not affiliated with
+> or endorsed by Tether or QVAC.
 
 ## Local development
 
@@ -46,7 +49,7 @@ Benchmark a local QVAC OpenAI-compatible streaming endpoint:
 
 ```bash
 qvac-bench \
-  --url http://localhost:8000/v1/chat/completions \
+  --url http://127.0.0.1:11434/v1/chat/completions \
   --model qvac \
   --prompt "Say hello in one short sentence." \
   --max-tokens 64 \
@@ -182,7 +185,7 @@ pnpm build
 
 # 3. Warm the endpoint once without recording the result.
 node dist/cli.js \
-  --url http://localhost:8000/v1/chat/completions \
+  --url http://127.0.0.1:11434/v1/chat/completions \
   --model qvac \
   --prompt-name hello \
   --max-tokens 64 \
@@ -192,7 +195,7 @@ node dist/cli.js \
 
 # 4. Run the measured benchmark with the same inputs.
 node dist/cli.js \
-  --url http://localhost:8000/v1/chat/completions \
+  --url http://127.0.0.1:11434/v1/chat/completions \
   --model qvac \
   --prompt-name hello \
   --max-tokens 64 \
@@ -233,7 +236,7 @@ To reproduce a result:
 
    ```bash
    node dist/cli.js \
-     --url http://localhost:8000/v1/chat/completions \
+     --url http://127.0.0.1:11434/v1/chat/completions \
      --model qvac \
      --prompt-name hello \
      --max-tokens 64 \
