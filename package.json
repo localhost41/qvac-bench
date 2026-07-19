@@ -1,6 +1,6 @@
 {
   "name": "@localhost41/qvac-bench",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Benchmark local QVAC OpenAI-compatible streaming endpoints from the command line",
   "keywords": [
     "qvac",
